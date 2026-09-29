@@ -21,6 +21,7 @@ img{max-width:100%}
 
 
 
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -638,6 +639,7 @@ async function loadImage(file) {
 
 
 
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -802,7 +804,7 @@ function refreshWS() { if (!ED.ws) return; const w = $('ws'); w.innerHTML = wsHT
 /* ---------- painel de propriedades ---------- */
 function selPanelHTML() {
   const f = ensureF(floor()), s = ED.sel;
-  if (!s) return `<p class="hint">Escolha uma ferramenta. <b>Parede/Viga</b>: toque no início e no fim (ou arraste); continua encadeada até carregar em <b>Terminar</b> ou Esc. Pode escrever o comprimento exacto. As bolinhas mostram o encaixe: ● ponta, ▲ meio, ■ canto, ✕ sobre a parede; a linha tracejada mostra o alinhamento. <b>Portas/Janelas</b>: toque sobre uma parede. Em <b>Seleccionar</b>, toque num elemento para o editar.</p>`;
+  if (!s) return `<p class="hint">Escolha uma ferramenta. <b>Parede/Viga</b>: arraste o dedo do início ao fim de cada parede (no PC: clique no início e no fim, encadeado até Esc). Dois dedos = mover e aproximar a vista. Pode escrever o comprimento exacto. As bolinhas mostram o encaixe: ● ponta, ▲ meio, ■ canto, ✕ sobre a parede; a linha tracejada mostra o alinhamento. <b>Portas/Janelas</b>: toque sobre uma parede. Em <b>Seleccionar</b>, toque num elemento para o editar.</p>`;
   const head = t => `<div class="ttl"><span>${t}</span><button class="del" data-selclose aria-label="Fechar">×</button></div>`;
   const tail = (dup = true) => `<div class="row">${dup ? '<button class="btn ghost" data-dupsel>Duplicar</button>' : ''}<button class="btn danger" data-delsel>Apagar</button></div>`;
   const len = o => Math.hypot(o.x2 - o.x1, o.y2 - o.y1), angd = o => ((Math.atan2(o.y2 - o.y1, o.x2 - o.x1) * 180 / Math.PI) + 360) % 360;
@@ -932,7 +934,7 @@ function drawEd() {
     s += `<text x="${cx}" y="${cy - t * .15}" font-size="${t}" text-anchor="middle" fill="#F3F1EA" font-weight="700" font-family="Archivo,sans-serif" pointer-events="none">${esc(r.name || ROOM_TYPES[r.type])}</text><text x="${cx}" y="${cy + t * 1.05}" font-size="${t * .8}" text-anchor="middle" fill="#8D9892" ${MONO} pointer-events="none">${fmt(r.w * r.l, 1)} m²</text>`;
   });
   // pegas da selecção
-  const H = (id, x, y) => `<circle data-handle="${id}" cx="${x}" cy="${y}" r="${G / 50}" fill="#5EC8E5" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  const H = (id, x, y) => `<circle data-handle="${id}" cx="${x}" cy="${y}" r="${G / 34}" fill="#5EC8E5" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
   if (ED.sel) { const q = selObj();
     if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>` + H('rect', q.x + q.w, q.y + q.l);
     if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
@@ -1091,47 +1093,90 @@ function drawElev(v) {
 
 /* ---------- interacção ---------- */
 function edPt(e) { const sv = $('ed'), m = sv.getScreenCTM().inverse(), q = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); return [q.x, q.y]; }
+/* toque: selecção por proximidade (tolerância em píxeis do ecrã) */
+function hitAll(f, x, y, tol) {
+  const out = [], segD = (x1, y1, x2, y2) => { const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1e-9, t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L2)); return Math.hypot(x1 + t * dx - x, y1 + t * dy - y); };
+  const boxD = (cx, cy, w, d, rot) => { const a = -(rot || 0) * Math.PI / 180, X = (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), Y = (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a); return Math.hypot(Math.max(0, Math.abs(X) - w / 2), Math.max(0, Math.abs(Y) - d / 2)); };
+  const add = (k, id, d, pr) => { if (d <= tol) out.push({ k, id, d, pr }); };
+  f.ops.forEach(o => { if (o.x == null) return; const a = o.ang || 0, hw = pf(o.w) / 2; add('op', o.id, segD(o.x - Math.cos(a) * hw, o.y - Math.sin(a) * hw, o.x + Math.cos(a) * hw, o.y + Math.sin(a) * hw), 0); });
+  (f.cols || []).forEach(c => add('col', c.id, boxD(c.x, c.y, pf(c.b), pf(c.b), 0), 0));
+  (f.objs || []).forEach(o => add('obj', o.id, boxD(o.x, o.y, pf(o.w), pf(o.d), o.rot), 1));
+  (f.beams || []).forEach(b => add('beam', b.id, Math.max(0, segD(b.x1, b.y1, b.x2, b.y2) - pf(b.b) / 2), 2));
+  (f.walls || []).forEach(w => add('wall', w.id, Math.max(0, segD(w.x1, w.y1, w.x2, w.y2) - wallT(w.type === 'int') / 2), 2));
+  f.rooms.forEach(r => { if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.l) out.push({ k: 'room', id: r.id, d: 0, pr: 3 }); });
+  (f.slabs || []).forEach(r => { if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.l) out.push({ k: 'slab', id: r.id, d: 0, pr: 4 }); });
+  return out.sort((a, b) => a.pr - b.pr || a.d - b.d);
+}
+function handleAt(x, y, tol) {
+  const q = selObj(); if (!q) return null; const k = ED.sel.k;
+  const hs = k === 'wall' || k === 'beam' ? [['p1', q.x1, q.y1], ['p2', q.x2, q.y2]] : k === 'room' || k === 'slab' ? [['rect', q.x + q.w, q.y + q.l]] : [];
+  let best = null; hs.forEach(([id, hx, hy]) => { const d = Math.hypot(hx - x, hy - y); if (d <= tol && (!best || d < best.d)) best = { id, d }; });
+  return best && best.id;
+}
+const KEYOF = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs' };
+function placeAt(f, x, y, touch) {
+  if (ED.tool === 'pilar') { const sn = snapAt(f, x, y), c = { id: uid(), x: sn.x, y: sn.y, b: pf(P().params.pilB) }; f.cols.push(c); ED.sel = { k: 'col', id: c.id }; }
+  else if (PLACE_OPS[ED.tool]) {
+    const t = PLACE_OPS[ED.tool], d0 = OP_TYPES[t], o = { id: uid(), t, w: d0.w, h: d0.h, q: 1, wall: d0.wall, sill: .9, flip: 0 };
+    if (!snapOp(f, o, x, y, Math.max(.6, ED.G / 25))) { toast('Toque em cima de uma parede'); return; }
+    if (ED.tool === 'porta' && o.wall === 'ext') { o.t = 'porta_ext'; o.w = OP_TYPES.porta_ext.w; }
+    f.ops.push(o); ED.sel = { k: 'op', id: o.id }; ED.hover = null; refreshOps();
+  } else if (ED.tool === 'place' && ED.place) { const L = OBJ_LIB[ED.place], sn = snapAt(f, x, y), o = { id: uid(), k: ED.place, x: sn.x, y: sn.y, w: L.w, d: L.d, rot: 0 }; f.objs.push(o); ED.sel = { k: 'obj', id: o.id }; }
+  else return;
+  // no telemóvel: depois de colocar, volta a Seleccionar (não cria mais nada ao tocar)
+  if (touch) { ED.tool = 'mover'; ED.place = null; ED.snap = null; ED.hover = null; }
+  buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum();
+}
+let _hintT = 0; const hintOnce = m => { if (Date.now() - _hintT > 2500) { _hintT = Date.now(); toast(m); } };
 function bindEditor() {
   const sv = $('ed'); if (!sv || sv._b) return; sv._b = 1;
   const ptrs = new Map(); let pinch = null;
   sv.addEventListener('pointerdown', e => {
     if (e.button === 2) return; e.preventDefault(); try { sv.setPointerCapture(e.pointerId); } catch (_) {}
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), G: ED.G, z: ED.orb.zoom }; ED.drag = null; return; }
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], r = sv.getBoundingClientRect(), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, k = ED.G / r.width;
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), G: ED.G, z: ED.orb.zoom, wx: ED.ox + (mx - r.left) * k, wy: ED.oy + (my - r.top) * k, mx, my, px: ED.orb.px, py: ED.orb.py };
+      if (ED.draw && (ED.draw.fresh || ED.draw.touch)) { ED.draw = null; ED.snap = null; }
+      if (ED.drag && ED.drag.prevSel !== undefined) ED.sel = ED.drag.prevSel;
+      ED.drag = null; drawEd(); return; }
+    if (ptrs.size > 2) return;
+    const touch = e.pointerType !== 'mouse';
     if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY }; return; }
-    const [x, y] = edPt(e), f = ensureF(floor());
+    const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
     const kinds = { parede: 'wall', viga: 'beam', sala: 'room', laje: 'slab' };
     if (kinds[ED.tool]) {
-      const lin = ED.tool === 'parede' || ED.tool === 'viga', sn = snapAt(f, x, y, ED.draw && lin ? [ED.draw.x0, ED.draw.y0] : null);
+      const lin = ED.tool === 'parede' || ED.tool === 'viga';
+      if (touch) { // no telemóvel: cada parede é um arrasto do início ao fim (um toque sozinho não cria nada)
+        const sn = snapAt(f, x, y); ED.draw = { kind: kinds[ED.tool], x0: sn.x, y0: sn.y, x1: sn.x, y1: sn.y, down: [e.clientX, e.clientY], fresh: 1, touch: 1 }; ED.snap = sn; drawEd(); return; }
+      const sn = snapAt(f, x, y, ED.draw && lin ? [ED.draw.x0, ED.draw.y0] : null);
       if (!ED.draw) { ED.draw = { kind: kinds[ED.tool], x0: sn.x, y0: sn.y, x1: sn.x, y1: sn.y, down: [e.clientX, e.clientY], fresh: 1 }; }
       else { ED.draw.x1 = sn.x; ED.draw.y1 = sn.y; finishDraw(lin); }
       ED.snap = sn; drawEd(); return;
     }
-    if (ED.tool === 'pilar') { const sn = snapAt(f, x, y), c = { id: uid(), x: sn.x, y: sn.y, b: pf(P().params.pilB) }; f.cols.push(c); ED.sel = { k: 'col', id: c.id }; buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum(); return; }
-    if (PLACE_OPS[ED.tool]) {
-      const t = PLACE_OPS[ED.tool], d0 = OP_TYPES[t], o = { id: uid(), t, w: d0.w, h: d0.h, q: 1, wall: d0.wall, sill: .9, flip: 0 };
-      if (!snapOp(f, o, x, y, Math.max(.6, ED.G / 25))) { toast('Toque em cima de uma parede'); return; }
-      if (ED.tool === 'porta' && o.wall === 'ext') { o.t = 'porta_ext'; o.w = OP_TYPES.porta_ext.w; }
-      f.ops.push(o); ED.sel = { k: 'op', id: o.id }; ED.hover = null; buzz(); changed(); renderSel(); refreshOps(); drawEd(); return;
+    if (ED.tool === 'pilar' || PLACE_OPS[ED.tool] || (ED.tool === 'place' && ED.place)) {
+      if (touch) { ED.drag = { kind: 'tap', cx: e.clientX, cy: e.clientY, x, y, ox: ED.ox, oy: ED.oy }; return; }
+      placeAt(f, x, y, false); return;
     }
-    if (ED.tool === 'place' && ED.place) { const L = OBJ_LIB[ED.place], sn = snapAt(f, x, y), o = { id: uid(), k: ED.place, x: sn.x, y: sn.y, w: L.w, d: L.d, rot: 0 };
-      f.objs.push(o); ED.sel = { k: 'obj', id: o.id }; buzz(); changed(); renderSel(); drawEd(); return; }
     // seleccionar / mover
-    const h = e.target.closest('[data-handle]');
-    if (h && ED.sel) { ED.drag = { kind: 'handle', which: h.dataset.handle }; return; }
-    const pick = [['opel', 'op', 'ops'], ['col', 'col', 'cols'], ['obj', 'obj', 'objs'], ['beam', 'beam', 'beams'], ['wall', 'wall', 'walls'], ['room', 'room', 'rooms'], ['slab', 'slab', 'slabs']];
-    for (const [attr, k, key] of pick) {
-      const el = e.target.closest(`[data-${attr}]`); if (!el) continue;
-      const q = f[key].find(z => z.id === el.dataset[attr]); if (!q) continue;
-      ED.sel = { k, id: q.id }; ED.drag = { kind: 'move', k, q, x, y, o: JSON.parse(JSON.stringify(q)) }; renderSel(); drawEd(); buzz(); return;
+    const hd = ED.sel && handleAt(x, y, tol * 1.2);
+    if (hd) { ED.drag = { kind: 'handle', which: hd, cx: e.clientX, cy: e.clientY, started: 0 }; return; }
+    const hits = hitAll(f, x, y, tol);
+    if (hits.length) {
+      const cur = ED.sel && hits.findIndex(h => h.k === ED.sel.k && h.id === ED.sel.id), wasSel = cur != null && cur >= 0, h = wasSel ? hits[cur] : hits[0];
+      const q = f[KEYOF[h.k]].find(z => z.id === h.id), prevSel = ED.sel;
+      ED.sel = { k: h.k, id: h.id };
+      ED.drag = { kind: 'move', k: h.k, q, x, y, o: JSON.parse(JSON.stringify(q)), cx: e.clientX, cy: e.clientY, started: 0, wasSel, touch, hits, prevSel, ox: ED.ox, oy: ED.oy };
+      if (!wasSel) { renderSel(); drawEd(); buzz(); }
+      return;
     }
-    ED.drag = { kind: 'pan', cx: e.clientX, cy: e.clientY, ox: ED.ox, oy: ED.oy };
-    if (ED.sel) { ED.sel = null; renderSel(); drawEd(); }
+    ED.drag = { kind: 'pan', cx: e.clientX, cy: e.clientY, ox: ED.ox, oy: ED.oy, empty: 1 };
   });
   sv.addEventListener('pointermove', e => {
     const pt = ptrs.get(e.pointerId); if (pt) { pt.x = e.clientX; pt.y = e.clientY; }
-    if (ptrs.size >= 2 && pinch) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (d > 0) { if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, pinch.z * d / pinch.d)); drawEd(); } else zoomTo(pinch.G * pinch.d / d); } return; }
+    if (ptrs.size >= 2 && pinch) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; if (d > 0) {
+      if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, pinch.z * d / pinch.d)); ED.orb.px = pinch.px + mx - pinch.mx; ED.orb.py = pinch.py + my - pinch.my; drawEd(); }
+      else { const r = sv.getBoundingClientRect(), G2 = Math.min(200, Math.max(1.5, pinch.G * pinch.d / d)), k = G2 / r.width; ED.G = G2; ED.ox = pinch.wx - (mx - r.left) * k; ED.oy = pinch.wy - (my - r.top) * k; drawEd(); } } return; }
     const f = ensureF(floor()), d = ED.drag;
     if (ED.view !== 'plan') { if (d && d.kind === 'orbit') { if (ED.view === '3d') { ED.orb.yaw = (ED.orb.yaw - (e.clientX - d.cx) * .5 + 360) % 360; ED.orb.pitch = Math.min(88, Math.max(5, ED.orb.pitch + (e.clientY - d.cy) * .35)); } else { ED.orb.px += e.clientX - d.cx; ED.orb.py += e.clientY - d.cy; } d.cx = e.clientX; d.cy = e.clientY; drawEd(); } return; }
     const [x, y] = edPt(e);
@@ -1140,6 +1185,13 @@ function bindEditor() {
       if (PLACE_OPS[ED.tool]) { const t = PLACE_OPS[ED.tool], o = { t, w: OP_TYPES[t].w, h: OP_TYPES[t].h, x: 0, y: 0 }; ED.hover = snapOp(f, o, x, y, Math.max(.6, ED.G / 25)) ? o : null; drawEd(); }
       else if (ED.tool !== 'mover') { ED.snap = snapAt(f, x, y); drawEd(); }
       return;
+    }
+    if ((d.kind === 'move' || d.kind === 'handle' || d.kind === 'tap') && !d.started) {
+      if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < (d.touch || d.kind === 'tap' ? 10 : 5)) return;
+      if (d.kind === 'tap' || (d.kind === 'move' && d.touch && !d.wasSel)) { // no telemóvel, arrastar algo não seleccionado = mover a vista
+        if (d.kind === 'move') { ED.sel = d.prevSel; renderSel(); }
+        ED.drag = { kind: 'pan', cx: d.cx, cy: d.cy, ox: d.ox, oy: d.oy }; return; }
+      d.started = 1;
     }
     if (d.kind === 'pan') { const { w } = edBox(), k = ED.G / w; ED.ox = d.ox - (e.clientX - d.cx) * k; ED.oy = d.oy - (e.clientY - d.cy) * k; drawEd(); return; }
     if (d.kind === 'move') {
@@ -1157,11 +1209,18 @@ function bindEditor() {
     }
   });
   const up = e => {
-    ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
-    // arrastar para desenhar (em vez de dois toques)
-    if (ED.draw && ED.draw.fresh) { const dn = ED.draw.down, moved = Math.hypot(e.clientX - dn[0], e.clientY - dn[1]); ED.draw.fresh = 0; if (moved > 12) { const lin = ED.draw.kind === 'wall' || ED.draw.kind === 'beam'; finishDraw(lin && false); } }
+    const had = ptrs.has(e.pointerId); ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+    if (!had) return;
+    if (ED.draw && ED.draw.fresh) { const dn = ED.draw.down, moved = Math.hypot(e.clientX - dn[0], e.clientY - dn[1]); ED.draw.fresh = 0;
+      if (moved > 12) finishDraw(false);
+      else if (ED.draw.touch) { ED.draw = null; ED.snap = null; drawEd(); hintOnce(ED.tool === 'sala' || ED.tool === 'laje' ? 'Arraste o dedo de um canto ao canto oposto' : 'Arraste o dedo do início ao fim da parede'); } }
     const d = ED.drag; ED.drag = null; if (!d) return;
-    if (d.kind === 'move' || d.kind === 'handle') { changed(); renderSel(); if (d.k === 'op') refreshOps(); if (ED.ws) refreshSum(); drawEd(); }
+    if (d.kind === 'tap') { placeAt(ensureF(floor()), d.x, d.y, true); return; }
+    if (d.kind === 'pan' && d.empty && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 8) { if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } return; }
+    if (d.kind === 'move' && !d.started) { // toque sem arrastar: se já estava seleccionado, passa ao elemento de baixo
+      if (d.wasSel && d.hits.length > 1) { const i = d.hits.findIndex(h => h.k === d.k && h.id === d.q.id), n = d.hits[(i + 1) % d.hits.length]; ED.sel = { k: n.k, id: n.id }; renderSel(); drawEd(); buzz(); }
+      return; }
+    if ((d.kind === 'move' || d.kind === 'handle') && d.started) { changed(); renderSel(); if (d.k === 'op') refreshOps(); if (ED.ws) refreshSum(); drawEd(); }
   };
   sv.addEventListener('pointerup', up); sv.addEventListener('pointercancel', up);
   sv.addEventListener('pointerleave', () => { if (ED.hover || (ED.snap && !ED.draw)) { ED.hover = null; ED.snap = null; drawEd(); } });
