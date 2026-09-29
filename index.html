@@ -19,6 +19,8 @@ body{margin:0}
 img{max-width:100%}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -109,6 +111,10 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .tool[aria-pressed="true"]{background:var(--blue);color:#06212a;border-color:var(--blue)}
 .tool.go{background:linear-gradient(160deg,var(--accent2),var(--accent));color:var(--accent-ink);border:0}
 .ed-zoom{position:absolute;right:8px;bottom:8px;display:grid;gap:6px}
+.ed-selbar{position:absolute;left:8px;top:8px;right:8px;margin:0 auto;width:max-content;display:flex;align-items:center;gap:4px;padding:5px;border-radius:14px;background:rgba(20,26,24,.96);border:1px solid var(--line2);box-shadow:0 8px 30px rgba(0,0,0,.6);z-index:3;max-width:calc(100% - 16px);white-space:nowrap}
+.ed-selbar b{font:700 12px var(--body);color:var(--ink);padding:0 8px;overflow:hidden;text-overflow:ellipsis;max-width:90px;min-width:0}
+.ed-selbar button{flex:none;min-width:38px;height:40px;border:0;border-radius:10px;background:var(--surface2);color:var(--ink);font:600 13px var(--body);padding:0 9px;cursor:pointer}
+.ed-selbar button.dz{background:rgba(255,138,122,.16);color:var(--bad)}
 .ed-status{position:absolute;left:8px;bottom:8px;font:600 11px var(--mono);color:var(--muted);background:rgba(10,13,12,.85);padding:6px 9px;border-radius:8px;max-width:70%}
 .selpanel{display:grid;gap:10px;padding:12px;border-radius:14px;border:1px solid rgba(255,122,26,.45);background:rgba(255,122,26,.05)}
 .selpanel .ttl{display:flex;justify-content:space-between;align-items:center;font:700 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent2)}
@@ -630,6 +636,8 @@ async function loadImage(file) {
 
 
 
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -744,6 +752,7 @@ function canvasHTML() {
     <svg class="ed" id="ed" aria-label="Editor da planta" tabindex="0"></svg>
     <div class="ed-zoom"><button class="iconbtn" data-zoom="in" aria-label="Aproximar">+</button><button class="iconbtn" data-zoom="out" aria-label="Afastar">−</button><button class="iconbtn" data-fit aria-label="Ajustar" title="Ajustar">⤢</button></div>
     <div class="ed-status" id="edStatus"></div>
+    <div class="ed-selbar" id="edSelBar" hidden></div>
     <div class="drawbox" id="drawBox" hidden></div>
   </div>`;
 }
@@ -819,7 +828,10 @@ function selPanelHTML() {
     return `<div class="selpanel">${head(OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto')}<div class="fields f3">${numF('Largura', o.w, 'm', 'data-obf="w" step="0.05"')}${numF('Profundidade', o.d, 'm', 'data-obf="d" step="0.05"')}<div class="field"><span>Rotação</span><button class="btn ghost" data-rot>↻ ${fmt(o.rot || 0, 0)}°</button></div></div>${tail()}</div>`; }
   return '';
 }
-function renderSel() { const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); }
+function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje' }[s.k] || ''; }
+function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; b.hidden = !s || ED.view !== 'plan' || !!ED.draw; if (b.hidden) { b.innerHTML = ''; return; }
+  b.innerHTML = `<b>${esc(selName(s))}</b>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
+function renderSel() { const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
 function objPicker() {
   const m = $('modal'); m.hidden = false;
   m.innerHTML = `<div class="card"><div class="card-title">Biblioteca de objectos</div>${libHTML()}<button class="btn ghost" data-libclose>Cancelar</button></div>`;
@@ -883,6 +895,7 @@ function fitView() {
 const isSel = (k, id) => ED.sel && ED.sel.k === k && ED.sel.id === id;
 function drawEd() {
   const sv = $('ed'); if (!sv) return;
+  renderSelBar();
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === ED.view));
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === ED.tool || (b.dataset.tool === 'objecto' && ED.tool === 'place')));
   document.querySelectorAll('[data-lib]').forEach(b => b.setAttribute('aria-pressed', ED.tool === 'place' && ED.place === b.dataset.lib));
@@ -1179,6 +1192,7 @@ document.addEventListener('click', e => {
   const zm = t.closest('[data-zoom]'); if (zm) { if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, ED.orb.zoom * (zm.dataset.zoom === 'in' ? 1.3 : .77))); drawEd(); } else zoomTo(ED.G * (zm.dataset.zoom === 'in' ? .75 : 1.33)); return; }
   if (t.closest('[data-dbok]')) { applyDrawBox(); return; }
   if (t.closest('[data-dbend]')) { ED.draw = null; drawEd(); return; }
+  if (t.closest('[data-seledit]')) { if (ED.ws) $('ws').classList.add('show-right'); else { const sp = $('selPanel'); if (sp) sp.scrollIntoView({ behavior: 'smooth', block: 'center' }); } return; }
   if (t.closest('[data-selclose]')) { ED.sel = null; renderSel(); drawEd(); return; }
   if (t.closest('[data-delsel]')) { delSel(); return; }
   if (t.closest('[data-dupsel]') && ED.sel) { const s = ED.sel, key = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', obj: 'objs' }[s.k], q = f[key].find(z => z.id === s.id), c = { ...JSON.parse(JSON.stringify(q)), id: uid() };
