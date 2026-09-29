@@ -22,6 +22,7 @@ img{max-width:100%}
 
 
 
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -364,7 +365,7 @@ const newProject = name => ({ id: uid(), name: name || 'Nova casa', floors: [new
 
 let PROJ = store.get('oc-projects', null);
 if (!PROJ || !PROJ.length) PROJ = [newProject('Minha primeira casa')];
-PROJ.forEach(pr => pr.floors.forEach(f => { ['walls', 'objs', 'cols', 'beams', 'slabs'].forEach(k => f[k] = f[k] || []); }));
+PROJ.forEach(pr => pr.floors.forEach(f => { ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].forEach(k => f[k] = f[k] || []); }));
 let CUR = store.get('oc-current', PROJ[0].id); if (!PROJ.find(p => p.id === CUR)) CUR = PROJ[0].id;
 let PRICES = store.get('oc-prices', {});
 const P = () => PROJ.find(p => p.id === CUR);
@@ -640,6 +641,7 @@ async function loadImage(file) {
 
 
 
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -650,20 +652,23 @@ const OBJ_LIB = {
 };
 const TOOLS = [
   ['Construção', [['mover', 'Seleccionar', 'V'], ['parede', 'Parede', 'W'], ['sala', 'Compartimento', 'R'], ['pilar', 'Pilar', 'P'], ['viga', 'Viga', 'B'], ['laje', 'Laje', 'L']]],
-  ['Aberturas', [['porta', 'Porta', 'D'], ['janela', 'Janela', 'J'], ['portao', 'Portão', 'G']]]
+  ['Aberturas', [['porta', 'Porta', 'D'], ['janela', 'Janela', 'J'], ['portao', 'Portão', 'G']]],
+  ['Desenho', [['guia', 'Linha guia', 'K'], ['canto', 'Canto / curva', 'C']]]
 ];
 const TOOL_ICON = {
   mover: '<path d="M5 3l14 8-6 2-2 6z"/>', parede: '<rect x="3" y="9" width="18" height="6"/>', sala: '<rect x="4" y="4" width="16" height="16"/><path d="M4 12h8V4"/>',
   pilar: '<rect x="8" y="8" width="8" height="8"/><path d="M8 8l8 8M16 8l-8 8"/>', viga: '<path d="M3 10h18v4H3z"/><path d="M7 10v4M17 10v4"/>', laje: '<path d="M3 8l9-4 9 4-9 4z"/><path d="M3 8v3l9 4 9-4V8"/>',
-  porta: '<path d="M5 20V5h2"/><path d="M7 5a13 13 0 0 1 12 13"/><path d="M5 20h14"/>', janela: '<rect x="3" y="9" width="18" height="6"/><path d="M3 12h18"/>', portao: '<path d="M3 20V8h18v12"/><path d="M3 12h18M3 16h18"/>'
+  porta: '<path d="M5 20V5h2"/><path d="M7 5a13 13 0 0 1 12 13"/><path d="M5 20h14"/>', janela: '<rect x="3" y="9" width="18" height="6"/><path d="M3 12h18"/>', portao: '<path d="M3 20V8h18v12"/><path d="M3 12h18M3 16h18"/>',
+  guia: '<path d="M2 20L22 4" stroke-dasharray="3 3"/><circle cx="8" cy="15.2" r="1.6"/><circle cx="16" cy="8.8" r="1.6"/>', canto: '<path d="M4 20V12a8 8 0 0 1 8-8h8"/><path d="M4 20h3M17 4v3"/>'
 };
+const KEYOF = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs', guide: 'guides' };
 const PLACE_OPS = { porta: 'porta_int', janela: 'janela', portao: 'portao' };
-const ED = { tool: 'mover', sel: null, drag: null, draw: null, ox: -1, oy: -1, G: 20, calib: [], view: 'plan', place: null, snap: null, hover: null, ws: false, wallType: 'ext',
+const ED = { tool: 'mover', sel: null, vsel: null, cornerMode: 'curva', cornerD: 1, drag: null, draw: null, ox: -1, oy: -1, G: 20, calib: [], view: 'plan', place: null, snap: null, hover: null, ws: false, wallType: 'ext',
   orb: { yaw: 35, pitch: 32, zoom: 1, px: 0, py: 0 } };
 const floor = () => P().floors[FL] || P().floors[0];
 const wallT = int => pf(P().params[int ? 'blocoInt' : 'blocoExt']) / 100 + .03;
 const VIEWS = [['plan', 'Planta'], ['3d', '3D'], ['S', 'Alçado Sul'], ['N', 'Alçado Norte'], ['E', 'Alçado Este'], ['W', 'Alçado Oeste']];
-const ensureF = f => { ['walls', 'objs', 'cols', 'beams', 'slabs'].forEach(k => f[k] = f[k] || []); return f; };
+const ensureF = f => { ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].forEach(k => f[k] = f[k] || []); return f; };
 
 /* ---------- geometria ---------- */
 function segsOf(f) {
@@ -699,8 +704,17 @@ function snapPoints(f) {
   f.rooms.forEach(r => [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.l], [r.x + r.w, r.y + r.l]].forEach(([x, y]) => pts.push({ x, y, k: 'corner' })));
   (f.cols || []).forEach(c => pts.push({ x: c.x, y: c.y, k: 'end' }));
   (f.slabs || []).forEach(r => [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.l], [r.x + r.w, r.y + r.l]].forEach(([x, y]) => pts.push({ x, y, k: 'corner' })));
+  // cruzamentos das linhas guia (entre si e com paredes/vigas)
+  const gl = f.guides || [];
+  if (gl.length) { const segs = segsOf(f).concat(f.beams || []);
+    const X = (a, b, bSeg) => { const r1x = a.x2 - a.x1, r1y = a.y2 - a.y1, r2x = b.x2 - b.x1, r2y = b.y2 - b.y1, den = r1x * r2y - r1y * r2x; if (Math.abs(den) < 1e-9) return;
+      const t = ((b.x1 - a.x1) * r2y - (b.y1 - a.y1) * r2x) / den, u = ((b.x1 - a.x1) * r1y - (b.y1 - a.y1) * r1x) / den; if (bSeg && (u < -1e-6 || u > 1 + 1e-6)) return;
+      pts.push({ x: +(a.x1 + t * r1x).toFixed(3), y: +(a.y1 + t * r1y).toFixed(3), k: 'int' }); };
+    gl.forEach((a, i) => { gl.slice(i + 1).forEach(b => X(a, b, false)); segs.forEach(sg => X(a, sg, true)); }); }
   return pts;
 }
+function fWithout(f, ids) { const o = { ...f }; ['rooms', 'walls', 'beams', 'cols', 'slabs', 'objs', 'guides'].forEach(k => { o[k] = (f[k] || []).filter(q => !ids.has(q.id)); }); return o; }
+function nearGuide(f, x, y, tol) { let best = null; (f.guides || []).forEach(g => { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L2 = dx * dx + dy * dy; if (L2 < 1e-9) return; const t = ((x - g.x1) * dx + (y - g.y1) * dy) / L2, px = g.x1 + t * dx, py = g.y1 + t * dy, d = Math.hypot(px - x, py - y); if (d <= tol && (!best || d < best.d)) best = { px, py, d, g }; }); return best; }
 const g5 = v => Math.round(v / .05) * .05;
 function snapAt(f, x, y, from, noOrtho) {
   const tol = ED.G / 32, pts = snapPoints(f);
@@ -710,7 +724,9 @@ function snapAt(f, x, y, from, noOrtho) {
   if (best) return { x: best.x, y: best.y, k: best.k, guides: [] };
   const on = nearestSeg(f, x, y, tol * .7, true);
   let rx = x, ry = y, k = 'grid'; const guides = [];
+  const og = on ? null : nearGuide(f, x, y, tol * .7);
   if (on) { rx = on.px; ry = on.py; k = 'on'; }
+  else if (og) { rx = og.px; ry = og.py; k = 'ong'; }
   else {
     // guias de alinhamento com pontos existentes (eixos)
     let gx = null, gy = null;
@@ -720,7 +736,7 @@ function snapAt(f, x, y, from, noOrtho) {
     if (gx || gy) k = 'guide';
   }
   // ângulos 0/45/90 a partir do ponto inicial
-  if (from && !noOrtho && k !== 'on') {
+  if (from && !noOrtho && k !== 'on' && k !== 'ong') {
     const dx = rx - from[0], dy = ry - from[1], L = Math.hypot(dx, dy), a = Math.atan2(dy, dx), st = Math.PI / 4, ar = Math.round(a / st) * st;
     if (L > 0 && Math.abs(a - ar) < 6 * Math.PI / 180) { const Lp = Math.abs(ar % (Math.PI / 2)) < 1e-6 ? (Math.abs(Math.cos(ar)) > .5 ? Math.abs(dx) : Math.abs(dy)) : L;
       rx = from[0] + Math.cos(ar) * Lp; ry = from[1] + Math.sin(ar) * Lp; if (k === 'grid') k = 'angle'; }
@@ -735,12 +751,12 @@ function snapMarker(s, G) {
   const X = s.x, Y = s.y;
   if (s.k === 'end') m += `<circle cx="${X}" cy="${Y}" r="${r * 1.3}" fill="none" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${X}" cy="${Y}" r="${r * .4}" fill="#FFB23F"/>`;
   else if (s.k === 'mid') m += `<path d="M${X} ${Y - r * 1.4} L${X + r * 1.3} ${Y + r} L${X - r * 1.3} ${Y + r}Z" fill="none" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
-  else if (s.k === 'corner') m += `<rect x="${X - r * 1.1}" y="${Y - r * 1.1}" width="${r * 2.2}" height="${r * 2.2}" fill="none" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
-  else if (s.k === 'on') m += `<path d="M${X - r} ${Y - r}L${X + r} ${Y + r}M${X + r} ${Y - r}L${X - r} ${Y + r}" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  else if (s.k === 'corner' || s.k === 'int') m += `<rect x="${X - r * 1.1}" y="${Y - r * 1.1}" width="${r * 2.2}" height="${r * 2.2}" fill="none" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  else if (s.k === 'on' || s.k === 'ong') m += `<path d="M${X - r} ${Y - r}L${X + r} ${Y + r}M${X + r} ${Y - r}L${X - r} ${Y + r}" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
   else m += `<circle cx="${X}" cy="${Y}" r="${r * .7}" fill="${c}"/>`;
   return m;
 }
-const SNAP_NAME = { end: 'ponta', mid: 'meio', corner: 'canto', on: 'sobre parede', guide: 'alinhado', angle: 'ângulo', grid: '' };
+const SNAP_NAME = { end: 'ponta', mid: 'meio', corner: 'canto', int: 'cruzamento', ong: 'sobre linha guia', on: 'sobre parede', guide: 'alinhado', angle: 'ângulo', grid: '' };
 
 /* ---------- HTML ---------- */
 const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${TOOL_ICON[k] || ''}</svg>`;
@@ -804,9 +820,10 @@ function refreshWS() { if (!ED.ws) return; const w = $('ws'); w.innerHTML = wsHT
 /* ---------- painel de propriedades ---------- */
 function selPanelHTML() {
   const f = ensureF(floor()), s = ED.sel;
-  if (!s) return `<p class="hint">Escolha uma ferramenta. <b>Parede/Viga</b>: arraste o dedo do início ao fim de cada parede (no PC: clique no início e no fim, encadeado até Esc). Dois dedos = mover e aproximar a vista. Pode escrever o comprimento exacto. As bolinhas mostram o encaixe: ● ponta, ▲ meio, ■ canto, ✕ sobre a parede; a linha tracejada mostra o alinhamento. <b>Portas/Janelas</b>: toque sobre uma parede. Em <b>Seleccionar</b>, toque num elemento para o editar.</p>`;
+  if (!s) return `<p class="hint">Escolha uma ferramenta. <b>Parede/Viga</b>: arraste o dedo do início ao fim de cada parede (no PC: clique no início e no fim, encadeado até Esc). Dois dedos = mover e aproximar a vista. Pode escrever o comprimento exacto. As bolinhas mostram o encaixe: ● ponta, ▲ meio, ■ canto, ✕ sobre a parede; a linha tracejada mostra o alinhamento. <b>Portas/Janelas</b>: toque sobre uma parede. Em <b>Seleccionar</b>, toque num elemento para o editar. <b>Vértice</b>: com a ferramenta Parede, toque na ponta e arraste-a. <b>Linha guia</b>: arraste, ou toque e escolha a direcção; copie paralela à distância certa. <b>Canto</b>: escolha Curva ou Chanfro e toque no vértice.</p>`;
   const head = t => `<div class="ttl"><span>${t}</span><button class="del" data-selclose aria-label="Fechar">×</button></div>`;
   const tail = (dup = true) => `<div class="row">${dup ? '<button class="btn ghost" data-dupsel>Duplicar</button>' : ''}<button class="btn danger" data-delsel>Apagar</button></div>`;
+  const parG = t => `<div class="field"><span>${t} a</span><div class="row" style="gap:6px;flex-wrap:nowrap"><div class="num" style="flex:1"><input id="gparD" type="number" inputmode="decimal" step="0.05" value="${ED.gparD || 1}"><span class="u">m</span></div><button class="btn ghost" data-gpar="1">← lado A</button><button class="btn ghost" data-gpar="-1">lado B →</button></div></div>`;
   const len = o => Math.hypot(o.x2 - o.x1, o.y2 - o.y1), angd = o => ((Math.atan2(o.y2 - o.y1, o.x2 - o.x1) * 180 / Math.PI) + 360) % 360;
   if (s.k === 'room') { const r = f.rooms.find(q => q.id === s.id); if (!r) return '';
     return `<div class="selpanel">${head('Compartimento')}<div class="fields">${txtF('Nome', r.name, 'data-rf="name"', 'ex.: Sala')}${selF('Tipo', r.type, ROOM_TYPES, 'data-rf="type"')}</div>
@@ -814,7 +831,10 @@ function selPanelHTML() {
   if (s.k === 'wall') { const w = f.walls.find(q => q.id === s.id); if (!w) return '';
     return `<div class="selpanel">${head('Parede')}<div class="seg" data-wtype><button data-v="ext" aria-pressed="${w.type === 'ext'}">Exterior (bloco ${pf(P().params.blocoExt)})</button><button data-v="int" aria-pressed="${w.type === 'int'}">Interior (bloco ${pf(P().params.blocoInt)})</button></div>
       <div class="fields f3">${numF('Comprimento', +len(w).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(w).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Espessura</span><div class="num"><input value="${fmt(wallT(w.type === 'int') * 100, 0)} cm" disabled></div></div></div>
-      <p class="hint">O comprimento muda a partir do ponto inicial, mantendo a direcção.</p>${tail()}</div>`; }
+      <p class="hint">O comprimento muda a partir do ponto inicial, mantendo a direcção.</p>${parG('Linha guia paralela à parede')}${tail()}</div>`; }
+  if (s.k === 'guide') { const g = f.guides.find(q => q.id === s.id); if (!g) return '';
+    return `<div class="selpanel">${head('Linha guia')}<div class="fields f3">${numF('Ângulo', +(angd(g) % 180).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Direcção</span><div class="row" style="gap:4px"><button class="btn ghost" data-gset="0">—</button><button class="btn ghost" data-gset="90">|</button><button class="btn ghost" data-gset="45">╲</button><button class="btn ghost" data-gset="135">╱</button></div></div></div>
+      ${parG('Copiar paralela')}<p class="hint">As paredes encaixam sobre as linhas guia e nos cruzamentos (■). Não entram no orçamento.</p>${tail(false)}</div>`; }
   if (s.k === 'beam') { const b = f.beams.find(q => q.id === s.id); if (!b) return '';
     return `<div class="selpanel">${head('Viga')}<div class="fields f4">${numF('Comprimento', +len(b).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(b).toFixed(1), '°', 'data-wa step="1"')}${numF('Largura', b.b, 'm', 'data-bf="b" step="0.05"')}${numF('Altura', b.h, 'm', 'data-bf="h" step="0.05"')}</div>${tail()}</div>`; }
   if (s.k === 'col') { const c = f.cols.find(q => q.id === s.id); if (!c) return '';
@@ -830,7 +850,7 @@ function selPanelHTML() {
     return `<div class="selpanel">${head(OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto')}<div class="fields f3">${numF('Largura', o.w, 'm', 'data-obf="w" step="0.05"')}${numF('Profundidade', o.d, 'm', 'data-obf="d" step="0.05"')}<div class="field"><span>Rotação</span><button class="btn ghost" data-rot>↻ ${fmt(o.rot || 0, 0)}°</button></div></div>${tail()}</div>`; }
   return '';
 }
-function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje' }[s.k] || ''; }
+function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje', guide: 'Linha guia' }[s.k] || ''; }
 function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; b.hidden = !s || ED.view !== 'plan' || !!ED.draw; if (b.hidden) { b.innerHTML = ''; return; }
   b.innerHTML = `<b>${esc(selName(s))}</b>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
 function renderSel() { const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
@@ -924,6 +944,8 @@ function drawEd() {
   (f.beams || []).forEach(b => { s += `<line data-beam="${b.id}" x1="${b.x1}" y1="${b.y1}" x2="${b.x2}" y2="${b.y2}" stroke="${isSel('beam', b.id) ? '#5EC8E5' : '#C98A4B'}" stroke-width="${pf(b.b)}" stroke-dasharray="${pf(b.b) * 2} ${pf(b.b)}" opacity=".85"/>`; });
   (f.cols || []).forEach(c => { const b = pf(c.b); s += `<g data-col="${c.id}"><rect x="${c.x - b / 2}" y="${c.y - b / 2}" width="${b}" height="${b}" fill="#5B6561" stroke="${isSel('col', c.id) ? '#5EC8E5' : '#E6E1D3'}" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M${c.x - b / 2} ${c.y - b / 2}l${b} ${b}M${c.x + b / 2} ${c.y - b / 2}l${-b} ${b}" stroke="#E6E1D3" stroke-width="1" vector-effect="non-scaling-stroke"/></g>`; });
   f.ops.filter(o => o.x != null).forEach(o => { s += opSym(f, o, isSel('op', o.id)); });
+  (f.guides || []).forEach(gd => { const L = Math.hypot(gd.x2 - gd.x1, gd.y2 - gd.y1) || 1, ux = (gd.x2 - gd.x1) / L, uy = (gd.y2 - gd.y1) / L, E = (G + GH) * 3, cx = ED.ox + G / 2, cy = ED.oy + GH / 2, t0 = (cx - gd.x1) * ux + (cy - gd.y1) * uy, bx = gd.x1 + ux * t0, by = gd.y1 + uy * t0, sel = isSel('guide', gd.id);
+    s += `<line x1="${bx - ux * E}" y1="${by - uy * E}" x2="${bx + ux * E}" y2="${by + uy * E}" stroke="${sel ? '#5EC8E5' : '#FF7A1A'}" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="10 5 2 5" vector-effect="non-scaling-stroke" opacity="${sel ? 1 : .75}" pointer-events="none"/>`; });
   // cotas
   segs.forEach(l => { const L = Math.hypot(l.x2 - l.x1, l.y2 - l.y1); if (L < .8 || (l.int && !l.wid)) return;
     const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2, a = Math.atan2(l.y2 - l.y1, l.x2 - l.x1) * 180 / Math.PI, rot = (a > 90 || a < -90) ? a + 180 : a, off = wallT(l.int) / 2 + fs * .55;
@@ -937,12 +959,14 @@ function drawEd() {
   const H = (id, x, y) => `<circle data-handle="${id}" cx="${x}" cy="${y}" r="${G / 34}" fill="#5EC8E5" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
   if (ED.sel) { const q = selObj();
     if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>` + H('rect', q.x + q.w, q.y + q.l);
-    if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
+    if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam' || ED.sel.k === 'guide')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
+  if (ED.vsel) s += `<circle cx="${ED.vsel.x}" cy="${ED.vsel.y}" r="${G / 22}" fill="rgba(255,122,26,.18)" stroke="#FF7A1A" stroke-width="2.5" vector-effect="non-scaling-stroke"/><circle cx="${ED.vsel.x}" cy="${ED.vsel.y}" r="${G / 90}" fill="#FF7A1A"/>`;
   // pré-visualização e encaixe
   const d = ED.draw;
   if (d) {
     const L = Math.hypot(d.x1 - d.x0, d.y1 - d.y0), a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0);
     if (d.kind === 'wall') s += `<line x1="${d.x0}" y1="${d.y0}" x2="${d.x1}" y2="${d.y1}" stroke="#FFB23F" stroke-width="${wallT(ED.wallType === 'int')}" stroke-linecap="square" opacity=".75"/>`;
+    if (d.kind === 'guide') s += `<line x1="${d.x0 - (d.x1 - d.x0) * 50}" y1="${d.y0 - (d.y1 - d.y0) * 50}" x2="${d.x1 + (d.x1 - d.x0) * 50}" y2="${d.y1 + (d.y1 - d.y0) * 50}" stroke="#FF7A1A" stroke-width="1.5" stroke-dasharray="10 5 2 5" vector-effect="non-scaling-stroke"/>`;
     if (d.kind === 'beam') s += `<line x1="${d.x0}" y1="${d.y0}" x2="${d.x1}" y2="${d.y1}" stroke="#C98A4B" stroke-width="${pf(P().params.vigB)}" opacity=".8"/>`;
     if (d.kind === 'room' || d.kind === 'slab') s += `<rect x="${Math.min(d.x0, d.x1)}" y="${Math.min(d.y0, d.y1)}" width="${Math.abs(d.x1 - d.x0)}" height="${Math.abs(d.y1 - d.y0)}" fill="rgba(255,122,26,.16)" stroke="#FFB23F" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
     const lab = d.kind === 'room' || d.kind === 'slab' ? `${fmt(Math.abs(d.x1 - d.x0), 2)} × ${fmt(Math.abs(d.y1 - d.y0), 2)} m` : `${fmt(L, 2)} m · ${fmt(((a * 180 / Math.PI) + 360) % 360, 0)}°`;
@@ -955,17 +979,22 @@ function drawEd() {
   ED.calib.forEach((q, i) => { s += `<circle cx="${q[0]}" cy="${q[1]}" r="${G / 60}" fill="#FF8A7A" stroke="#fff" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`; if (i) s += `<line x1="${ED.calib[0][0]}" y1="${ED.calib[0][1]}" x2="${q[0]}" y2="${q[1]}" stroke="#FF8A7A" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`; });
   sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern></defs>` + s;
   const g = floorGeom(f), st = $('edStatus');
-  const msg = { sala: 'Compartimento: toque num canto e no canto oposto', parede: 'Parede: toque no início e no fim · Esc termina', viga: 'Viga: toque no início e no fim', laje: 'Laje: toque num canto e no canto oposto', pilar: 'Pilar: toque onde o quer (encaixa em pontas e cantos)', porta: 'Toque sobre uma parede', janela: 'Toque sobre uma parede', portao: 'Toque sobre uma parede', place: `Toque para colocar: ${ED.place && OBJ_LIB[ED.place] ? OBJ_LIB[ED.place].n : ''}`, calib: ED.calib.length ? 'Toque na outra ponta da cota' : 'Toque numa ponta de uma cota conhecida' }[ED.tool];
+  const msg = { sala: 'Compartimento: toque num canto e no canto oposto', parede: 'Parede: arraste do início ao fim · toque num vértice para o mover', viga: 'Viga: toque no início e no fim', laje: 'Laje: toque num canto e no canto oposto', pilar: 'Pilar: toque onde o quer (encaixa em pontas e cantos)', guia: 'Linha guia: arraste na direcção, ou toque num ponto e escolha a direcção', canto: 'Canto: toque no vértice onde duas paredes se juntam', porta: 'Toque sobre uma parede', janela: 'Toque sobre uma parede', portao: 'Toque sobre uma parede', place: `Toque para colocar: ${ED.place && OBJ_LIB[ED.place] ? OBJ_LIB[ED.place].n : ''}`, calib: ED.calib.length ? 'Toque na outra ponta da cota' : 'Toque numa ponta de uma cota conhecida' }[ED.tool];
   const sn = ED.snap && ED.tool !== 'mover' && SNAP_NAME[ED.snap.k] ? ` · encaixe: ${SNAP_NAME[ED.snap.k]}` : '';
   if (st) st.textContent = (msg || `${fmt(g.area, 1)} m² · paredes ext ${fmt(g.ext, 1)} m · int ${fmt(g.int, 1)} m`) + sn;
   drawBoxUI();
 }
-function selObj() { if (!ED.sel) return null; const f = floor(), key = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs' }[ED.sel.k]; return (f[key] || []).find(q => q.id === ED.sel.id); }
+function selObj() { if (!ED.sel) return null; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; return (f[key] || []).find(q => q.id === ED.sel.id); }
 // caixa flutuante de comprimento durante o desenho
 function drawBoxUI() {
   const box = $('drawBox'); if (!box) return;
   const d = ED.draw;
+  if (!d && ED.tool === 'canto' && ED.view === 'plan') { if (box.dataset.for !== 'canto') { box.dataset.for = 'canto'; box.hidden = false;
+      box.innerHTML = `<div class="seg" data-cmode><button data-v="curva" aria-pressed="${ED.cornerMode === 'curva'}">Curva</button><button data-v="chanfro" aria-pressed="${ED.cornerMode === 'chanfro'}">Chanfro</button></div><label>Tamanho<input id="dbCorner" type="number" inputmode="decimal" step="0.05" value="${ED.cornerD}"></label><span>m</span>`; }
+    else box.querySelectorAll('[data-cmode] button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === ED.cornerMode)); return; }
   if (!d || ED.view !== 'plan') { box.hidden = true; box.dataset.for = ''; return; }
+  if (d.kind === 'guide') { const key = 'g:' + d.x0 + ':' + d.y0; if (box.dataset.for !== key) { box.dataset.for = key; box.hidden = false;
+      box.innerHTML = `<span>Direcção</span><button class="tool go" data-gdir="0">— Horiz.</button><button class="tool go" data-gdir="90">| Vert.</button><button class="tool go" data-gdir="45">╲ 45°</button><button class="tool go" data-gdir="135">╱ 135°</button><button class="tool" data-dbend>Cancelar</button>`; } return; }
   const lin = d.kind === 'wall' || d.kind === 'beam', key = d.kind + ':' + d.x0 + ':' + d.y0;
   if (box.dataset.for !== key) {
     box.dataset.for = key; box.hidden = false;
@@ -983,6 +1012,10 @@ function applyDrawBox() {
 }
 function finishDraw(chain) {
   const d = ED.draw, f = ensureF(floor()); if (!d) return;
+  if (d.kind === 'guide') {
+    if (Math.hypot(d.x1 - d.x0, d.y1 - d.y0) >= .05) { const g = { id: uid(), x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1 }; f.guides.push(g); ED.sel = { k: 'guide', id: g.id }; buzz(); changed(); }
+    ED.draw = null; renderSel(); drawEd(); return;
+  }
   if (d.kind === 'wall' || d.kind === 'beam') {
     if (Math.hypot(d.x1 - d.x0, d.y1 - d.y0) >= .1) {
       const el = d.kind === 'wall' ? { id: uid(), x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, type: ED.wallType } : { id: uid(), x1: d.x0, y1: d.y0, x2: d.x1, y2: d.y1, b: pf(P().params.vigB), h: pf(P().params.vigH) };
@@ -1103,8 +1136,9 @@ function hitAll(f, x, y, tol) {
   (f.objs || []).forEach(o => add('obj', o.id, boxD(o.x, o.y, pf(o.w), pf(o.d), o.rot), 1));
   (f.beams || []).forEach(b => add('beam', b.id, Math.max(0, segD(b.x1, b.y1, b.x2, b.y2) - pf(b.b) / 2), 2));
   (f.walls || []).forEach(w => add('wall', w.id, Math.max(0, segD(w.x1, w.y1, w.x2, w.y2) - wallT(w.type === 'int') / 2), 2));
-  f.rooms.forEach(r => { if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.l) out.push({ k: 'room', id: r.id, d: 0, pr: 3 }); });
-  (f.slabs || []).forEach(r => { if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.l) out.push({ k: 'slab', id: r.id, d: 0, pr: 4 }); });
+  (f.guides || []).forEach(g => { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L = Math.hypot(dx, dy); if (L < 1e-9) return; add('guide', g.id, Math.abs((x - g.x1) * dy - (y - g.y1) * dx) / L, 2.5); });
+  f.rooms.forEach(r => add('room', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 3));
+  (f.slabs || []).forEach(r => add('slab', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 4));
   return out.sort((a, b) => a.pr - b.pr || a.d - b.d);
 }
 function handleAt(x, y, tol) {
@@ -1113,7 +1147,6 @@ function handleAt(x, y, tol) {
   let best = null; hs.forEach(([id, hx, hy]) => { const d = Math.hypot(hx - x, hy - y); if (d <= tol && (!best || d < best.d)) best = { id, d }; });
   return best && best.id;
 }
-const KEYOF = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs' };
 function placeAt(f, x, y, touch) {
   if (ED.tool === 'pilar') { const sn = snapAt(f, x, y), c = { id: uid(), x: sn.x, y: sn.y, b: pf(P().params.pilB) }; f.cols.push(c); ED.sel = { k: 'col', id: c.id }; }
   else if (PLACE_OPS[ED.tool]) {
@@ -1127,12 +1160,39 @@ function placeAt(f, x, y, touch) {
   if (touch) { ED.tool = 'mover'; ED.place = null; ED.snap = null; ED.hover = null; }
   buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum();
 }
+/* vértices (pontas de paredes/vigas desenhadas) */
+function vertexAt(f, x, y, tol) {
+  let best = null; ['walls', 'beams'].forEach(k => (f[k] || []).forEach(w => [[w.x1, w.y1], [w.x2, w.y2]].forEach(([vx, vy]) => { const d = Math.hypot(vx - x, vy - y); if (d <= tol && (!best || d < best.d)) best = { x: vx, y: vy, d }; })));
+  return best && { x: best.x, y: best.y };
+}
+function refsAt(f, vx, vy) { const out = []; ['walls', 'beams'].forEach(k => (f[k] || []).forEach(w => { if (Math.hypot(w.x1 - vx, w.y1 - vy) < 2e-3) out.push({ w, e: 1 }); if (Math.hypot(w.x2 - vx, w.y2 - vy) < 2e-3) out.push({ w, e: 2 }); })); return out; }
+/* canto: chanfro ou curva entre as duas paredes que se juntam num vértice */
+function applyCorner(f, x, y, tol) {
+  const v = vertexAt(f, x, y, tol); if (!v) { hintOnce('Toque em cima do vértice onde duas paredes se juntam'); return; }
+  const refs = refsAt(f, v.x, v.y).filter(r => f.walls.includes(r.w));
+  if (refs.length !== 2) { toast(refs.length < 2 ? 'Este canto só tem uma parede' : 'Há mais de duas paredes neste vértice'); return; }
+  const D = Math.max(.05, pf(ED.cornerD) || 1), dir = r => { const ox = r.e === 1 ? r.w.x2 : r.w.x1, oy = r.e === 1 ? r.w.y2 : r.w.y1, L = Math.hypot(ox - v.x, oy - v.y); return { ux: (ox - v.x) / L, uy: (oy - v.y) / L, L }; };
+  const a = dir(refs[0]), b = dir(refs[1]), cosT = a.ux * b.ux + a.uy * b.uy, th = Math.acos(Math.max(-1, Math.min(1, cosT)));
+  if (th > Math.PI - .02 || th < .02) { toast('As paredes estão em linha — não há canto'); return; }
+  if (D >= a.L - .05 || D >= b.L - .05) { toast('Tamanho maior que a parede — use um valor menor'); return; }
+  const T1 = [v.x + a.ux * D, v.y + a.uy * D], T2 = [v.x + b.ux * D, v.y + b.uy * D], type = refs[0].w.type, gid = uid();
+  const setEnd = (r, P2) => { r.w['x' + r.e] = +P2[0].toFixed(3); r.w['y' + r.e] = +P2[1].toFixed(3); };
+  setEnd(refs[0], T1); setEnd(refs[1], T2);
+  const pts = [T1];
+  if (ED.cornerMode === 'curva') { const R = D * Math.tan(th / 2), bx = a.ux + b.ux, by = a.uy + b.uy, bl = Math.hypot(bx, by), h = R / Math.sin(th / 2), C = [v.x + bx / bl * h, v.y + by / bl * h];
+    const a1 = Math.atan2(T1[1] - C[1], T1[0] - C[0]); let sw = Math.atan2(T2[1] - C[1], T2[0] - C[0]) - a1; while (sw > Math.PI) sw -= 2 * Math.PI; while (sw < -Math.PI) sw += 2 * Math.PI;
+    const n = Math.max(4, Math.ceil(Math.abs(sw) / (Math.PI / 12))); for (let i = 1; i < n; i++) pts.push([C[0] + R * Math.cos(a1 + sw * i / n), C[1] + R * Math.sin(a1 + sw * i / n)]); }
+  pts.push(T2);
+  for (let i = 0; i < pts.length - 1; i++) f.walls.push({ id: uid(), x1: +pts[i][0].toFixed(3), y1: +pts[i][1].toFixed(3), x2: +pts[i + 1][0].toFixed(3), y2: +pts[i + 1][1].toFixed(3), type, grp: gid });
+  ED.vsel = null; buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum(); toast(ED.cornerMode === 'curva' ? 'Canto arredondado' : 'Chanfro feito');
+}
 let _hintT = 0; const hintOnce = m => { if (Date.now() - _hintT > 2500) { _hintT = Date.now(); toast(m); } };
 function bindEditor() {
   const sv = $('ed'); if (!sv || sv._b) return; sv._b = 1;
   const ptrs = new Map(); let pinch = null;
   sv.addEventListener('pointerdown', e => {
     if (e.button === 2) return; e.preventDefault(); try { sv.setPointerCapture(e.pointerId); } catch (_) {}
+    if (e.isPrimary) ptrs.clear(); // um toque novo começa sempre limpo (evita dedos "presos")
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], r = sv.getBoundingClientRect(), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, k = ED.G / r.width;
       pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), G: ED.G, z: ED.orb.zoom, wx: ED.ox + (mx - r.left) * k, wy: ED.oy + (my - r.top) * k, mx, my, px: ED.orb.px, py: ED.orb.py };
@@ -1144,14 +1204,20 @@ function bindEditor() {
     if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY }; return; }
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
-    const kinds = { parede: 'wall', viga: 'beam', sala: 'room', laje: 'slab' };
+    if (ED.tool === 'canto') { if (touch) ED.drag = { kind: 'tap', cx: e.clientX, cy: e.clientY, x, y, ox: ED.ox, oy: ED.oy, corner: 1 }; else applyCorner(f, x, y, tol); return; }
+    const kinds = { parede: 'wall', viga: 'beam', sala: 'room', laje: 'slab', guia: 'guide' };
+    // vértice seleccionado: arrastá-lo move as pontas de todas as paredes/vigas ligadas a ele
+    if (ED.vsel && Math.hypot(x - ED.vsel.x, y - ED.vsel.y) <= tol * 1.3) { const refs = refsAt(f, ED.vsel.x, ED.vsel.y);
+      if (refs.length) { ED.drag = { kind: 'vertex', refs, cx: e.clientX, cy: e.clientY, started: 0, touch, fx: fWithout(f, new Set(refs.map(r => r.w.id))) }; return; } }
     if (kinds[ED.tool]) {
-      const lin = ED.tool === 'parede' || ED.tool === 'viga';
+      const lin = ED.tool === 'parede' || ED.tool === 'viga' || ED.tool === 'guia';
+      if (ED.draw && ED.draw.kind === 'guide' && !ED.draw.fresh && touch) { ED.draw = null; }
+      if (touch && ED.vsel) ED.vsel = null;
       if (touch) { // no telemóvel: cada parede é um arrasto do início ao fim (um toque sozinho não cria nada)
         const sn = snapAt(f, x, y); ED.draw = { kind: kinds[ED.tool], x0: sn.x, y0: sn.y, x1: sn.x, y1: sn.y, down: [e.clientX, e.clientY], fresh: 1, touch: 1 }; ED.snap = sn; drawEd(); return; }
       const sn = snapAt(f, x, y, ED.draw && lin ? [ED.draw.x0, ED.draw.y0] : null);
       if (!ED.draw) { ED.draw = { kind: kinds[ED.tool], x0: sn.x, y0: sn.y, x1: sn.x, y1: sn.y, down: [e.clientX, e.clientY], fresh: 1 }; }
-      else { ED.draw.x1 = sn.x; ED.draw.y1 = sn.y; finishDraw(lin); }
+      else { ED.draw.x1 = sn.x; ED.draw.y1 = sn.y; finishDraw(lin && ED.tool !== 'guia'); }
       ED.snap = sn; drawEd(); return;
     }
     if (ED.tool === 'pilar' || PLACE_OPS[ED.tool] || (ED.tool === 'place' && ED.place)) {
@@ -1160,17 +1226,19 @@ function bindEditor() {
     }
     // seleccionar / mover
     const hd = ED.sel && handleAt(x, y, tol * 1.2);
-    if (hd) { ED.drag = { kind: 'handle', which: hd, cx: e.clientX, cy: e.clientY, started: 0 }; return; }
+    if (hd) { const q = selObj(), refs = hd === 'rect' || ED.sel.k === 'guide' ? [] : refsAt(f, q['x' + hd[1]], q['y' + hd[1]]).filter(r => r.w !== q);
+      ED.drag = { kind: 'handle', which: hd, cx: e.clientX, cy: e.clientY, started: 0, touch, refs, fx: fWithout(f, new Set([q.id, ...refs.map(r => r.w.id)])) }; return; }
     const hits = hitAll(f, x, y, tol);
     if (hits.length) {
       const cur = ED.sel && hits.findIndex(h => h.k === ED.sel.k && h.id === ED.sel.id), wasSel = cur != null && cur >= 0, h = wasSel ? hits[cur] : hits[0];
       const q = f[KEYOF[h.k]].find(z => z.id === h.id), prevSel = ED.sel;
       ED.sel = { k: h.k, id: h.id };
-      ED.drag = { kind: 'move', k: h.k, q, x, y, o: JSON.parse(JSON.stringify(q)), cx: e.clientX, cy: e.clientY, started: 0, wasSel, touch, hits, prevSel, ox: ED.ox, oy: ED.oy };
+      ED.drag = { kind: 'move', k: h.k, q, x, y, o: JSON.parse(JSON.stringify(q)), cx: e.clientX, cy: e.clientY, started: 0, wasSel, touch, hits, prevSel, ox: ED.ox, oy: ED.oy, fx: fWithout(f, new Set([q.id])) };
       if (!wasSel) { renderSel(); drawEd(); buzz(); }
       return;
     }
     ED.drag = { kind: 'pan', cx: e.clientX, cy: e.clientY, ox: ED.ox, oy: ED.oy, empty: 1 };
+    if (ED.vsel) { ED.vsel = null; drawEd(); }
   });
   sv.addEventListener('pointermove', e => {
     const pt = ptrs.get(e.pointerId); if (pt) { pt.x = e.clientX; pt.y = e.clientY; }
@@ -1186,7 +1254,7 @@ function bindEditor() {
       else if (ED.tool !== 'mover') { ED.snap = snapAt(f, x, y); drawEd(); }
       return;
     }
-    if ((d.kind === 'move' || d.kind === 'handle' || d.kind === 'tap') && !d.started) {
+    if ((d.kind === 'move' || d.kind === 'handle' || d.kind === 'tap' || d.kind === 'vertex') && !d.started) {
       if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < (d.touch || d.kind === 'tap' ? 10 : 5)) return;
       if (d.kind === 'tap' || (d.kind === 'move' && d.touch && !d.wasSel)) { // no telemóvel, arrastar algo não seleccionado = mover a vista
         if (d.kind === 'move') { ED.sel = d.prevSel; renderSel(); }
@@ -1197,29 +1265,32 @@ function bindEditor() {
     if (d.kind === 'move') {
       const q = d.q, o = d.o;
       if (d.k === 'op') snapOp(f, q, x, y, Math.max(1, ED.G / 12));
-      else if (d.k === 'wall' || d.k === 'beam') { const sn = snapAt(f, o.x1 + (x - d.x), o.y1 + (y - d.y)), dx = sn.x - o.x1, dy = sn.y - o.y1; Object.assign(q, { x1: +(o.x1 + dx).toFixed(3), y1: +(o.y1 + dy).toFixed(3), x2: +(o.x2 + dx).toFixed(3), y2: +(o.y2 + dy).toFixed(3) }); d.snap = sn; }
-      else { const sn = snapAt(f, o.x + (x - d.x), o.y + (y - d.y)); q.x = sn.x; q.y = sn.y; d.snap = sn; }
+      else if (d.k === 'wall' || d.k === 'beam' || d.k === 'guide') { const sn = snapAt(d.fx, o.x1 + (x - d.x), o.y1 + (y - d.y)), dx = sn.x - o.x1, dy = sn.y - o.y1; Object.assign(q, { x1: +(o.x1 + dx).toFixed(3), y1: +(o.y1 + dy).toFixed(3), x2: +(o.x2 + dx).toFixed(3), y2: +(o.y2 + dy).toFixed(3) }); d.snap = sn; }
+      else { const sn = snapAt(d.fx, o.x + (x - d.x), o.y + (y - d.y)); q.x = sn.x; q.y = sn.y; d.snap = sn; }
       drawEd(); return;
     }
     if (d.kind === 'handle') {
       const q = selObj(); if (!q) return;
-      if (d.which === 'rect') { const sn = snapAt(f, x, y); q.w = Math.max(.3, +(sn.x - q.x).toFixed(3)); q.l = Math.max(.3, +(sn.y - q.y).toFixed(3)); d.snap = sn; }
-      else { const i = d.which === 'p1' ? 1 : 2, j = 3 - i, sn = snapAt(f, x, y, [q['x' + j], q['y' + j]]); q['x' + i] = sn.x; q['y' + i] = sn.y; d.snap = sn; }
+      if (d.which === 'rect') { const sn = snapAt(d.fx, x, y); q.w = Math.max(.3, +(sn.x - q.x).toFixed(3)); q.l = Math.max(.3, +(sn.y - q.y).toFixed(3)); d.snap = sn; }
+      else { const i = d.which === 'p1' ? 1 : 2, j = 3 - i, sn = snapAt(d.fx, x, y, [q['x' + j], q['y' + j]]); q['x' + i] = sn.x; q['y' + i] = sn.y; d.snap = sn; (d.refs || []).forEach(r => { r.w['x' + r.e] = sn.x; r.w['y' + r.e] = sn.y; }); }
       drawEd();
     }
+    if (d.kind === 'vertex') { const sn = snapAt(d.fx, x, y); d.refs.forEach(r => { r.w['x' + r.e] = sn.x; r.w['y' + r.e] = sn.y; }); ED.vsel = { x: sn.x, y: sn.y }; d.snap = sn; drawEd(); }
   });
   const up = e => {
     const had = ptrs.has(e.pointerId); ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
     if (!had) return;
     if (ED.draw && ED.draw.fresh) { const dn = ED.draw.down, moved = Math.hypot(e.clientX - dn[0], e.clientY - dn[1]); ED.draw.fresh = 0;
       if (moved > 12) finishDraw(false);
-      else if (ED.draw.touch) { ED.draw = null; ED.snap = null; drawEd(); hintOnce(ED.tool === 'sala' || ED.tool === 'laje' ? 'Arraste o dedo de um canto ao canto oposto' : 'Arraste o dedo do início ao fim da parede'); } }
+      else if (ED.draw.touch) { const dr = ED.draw, fl = ensureF(floor()), [tx, ty] = edPt(e), tolT = ED.G / edBox().w * 26, vx = (dr.kind === 'wall' || dr.kind === 'beam') && vertexAt(fl, tx, ty, tolT);
+        if (dr.kind === 'guide') { dr.touch = 0; drawEd(); } // toque: escolher a direcção na caixa
+        else if (vx) { ED.draw = null; ED.snap = null; ED.vsel = vx; ED.sel = null; renderSel(); drawEd(); buzz(); hintOnce('Vértice seleccionado — arraste-o para o mover'); }
+        else { ED.draw = null; ED.snap = null; if (ED.vsel) ED.vsel = null; drawEd(); hintOnce(ED.tool === 'sala' || ED.tool === 'laje' ? 'Arraste o dedo de um canto ao canto oposto' : 'Arraste o dedo do início ao fim · toque num vértice para o mover'); } } }
     const d = ED.drag; ED.drag = null; if (!d) return;
-    if (d.kind === 'tap') { placeAt(ensureF(floor()), d.x, d.y, true); return; }
+    if (d.kind === 'tap') { if (d.corner) applyCorner(ensureF(floor()), d.x, d.y, ED.G / edBox().w * 28); else placeAt(ensureF(floor()), d.x, d.y, true); return; }
+    if (d.kind === 'vertex') { if (d.started) { changed(); if (ED.ws) refreshSum(); drawEd(); } return; }
     if (d.kind === 'pan' && d.empty && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 8) { if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } return; }
-    if (d.kind === 'move' && !d.started) { // toque sem arrastar: se já estava seleccionado, passa ao elemento de baixo
-      if (d.wasSel && d.hits.length > 1) { const i = d.hits.findIndex(h => h.k === d.k && h.id === d.q.id), n = d.hits[(i + 1) % d.hits.length]; ED.sel = { k: n.k, id: n.id }; renderSel(); drawEd(); buzz(); }
-      return; }
+    if (d.kind === 'move' && !d.started) return;
     if ((d.kind === 'move' || d.kind === 'handle') && d.started) { changed(); renderSel(); if (d.k === 'op') refreshOps(); if (ED.ws) refreshSum(); drawEd(); }
   };
   sv.addEventListener('pointerup', up); sv.addEventListener('pointercancel', up);
@@ -1234,7 +1305,7 @@ function refreshOps() { const el = $('opsList'); if (el) el.innerHTML = floor().
 function setTool(k) {
   if (k === 'objecto') { objPicker(); return; }
   if (ED.view !== 'plan' && k !== 'mover') ED.view = 'plan';
-  ED.tool = k; ED.draw = null; ED.calib = []; ED.hover = null; ED.snap = null; if (k !== 'mover') ED.sel = null; renderSel(); drawEd(); buzz();
+  ED.tool = k; ED.draw = null; ED.vsel = null; ED.calib = []; ED.hover = null; ED.snap = null; if (k !== 'mover') ED.sel = null; renderSel(); drawEd(); buzz();
 }
 
 /* ---------- eventos do editor ---------- */
@@ -1250,18 +1321,25 @@ document.addEventListener('click', e => {
   if (t.closest('[data-fit]')) { if (ED.view === 'plan') fitView(); else { ED.orb.zoom = 1; ED.orb.px = ED.orb.py = 0; } drawEd(); return; }
   const zm = t.closest('[data-zoom]'); if (zm) { if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, ED.orb.zoom * (zm.dataset.zoom === 'in' ? 1.3 : .77))); drawEd(); } else zoomTo(ED.G * (zm.dataset.zoom === 'in' ? .75 : 1.33)); return; }
   if (t.closest('[data-dbok]')) { applyDrawBox(); return; }
+  const gdir = t.closest('[data-gdir]'); if (gdir && ED.draw) { const a = +gdir.dataset.gdir * Math.PI / 180; ED.draw.x1 = ED.draw.x0 + Math.cos(a) * 5; ED.draw.y1 = ED.draw.y0 + Math.sin(a) * 5; finishDraw(false); return; }
+  const cm = t.closest('[data-cmode] button'); if (cm) { ED.cornerMode = cm.dataset.v; drawBoxUI(); buzz(); return; }
+  const gset = t.closest('[data-gset]'); if (gset && ED.sel) { const q = selObj(), a = +gset.dataset.gset * Math.PI / 180, L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 5; q.x2 = +(q.x1 + Math.cos(a) * L).toFixed(3); q.y2 = +(q.y1 + Math.sin(a) * L).toFixed(3); renderSel(); drawEd(); changed(); return; }
+  const gp = t.closest('[data-gpar]'); if (gp && ED.sel) { const q = selObj(), D = pf($('gparD') && $('gparD').value); if (!(D > 0)) { toast('Escreva a distância'); return; } ED.gparD = D;
+    const L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 1, sg = +gp.dataset.gpar, nx = -(q.y2 - q.y1) / L * D * sg, ny = (q.x2 - q.x1) / L * D * sg, fl = ensureF(floor());
+    const g = { id: uid(), x1: +(q.x1 + nx).toFixed(3), y1: +(q.y1 + ny).toFixed(3), x2: +(q.x2 + nx).toFixed(3), y2: +(q.y2 + ny).toFixed(3) }; fl.guides.push(g); ED.sel = { k: 'guide', id: g.id }; renderSel(); drawEd(); changed(); buzz(); toast(`Linha guia a ${fmt(D, 2)} m`); return; }
   if (t.closest('[data-dbend]')) { ED.draw = null; drawEd(); return; }
   if (t.closest('[data-seledit]')) { if (ED.ws) $('ws').classList.add('show-right'); else { const sp = $('selPanel'); if (sp) sp.scrollIntoView({ behavior: 'smooth', block: 'center' }); } return; }
   if (t.closest('[data-selclose]')) { ED.sel = null; renderSel(); drawEd(); return; }
   if (t.closest('[data-delsel]')) { delSel(); return; }
-  if (t.closest('[data-dupsel]') && ED.sel) { const s = ED.sel, key = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', obj: 'objs' }[s.k], q = f[key].find(z => z.id === s.id), c = { ...JSON.parse(JSON.stringify(q)), id: uid() };
+  if (t.closest('[data-dupsel]') && ED.sel) { const s = ED.sel, key = KEYOF[s.k], q = f[key].find(z => z.id === s.id), c = { ...JSON.parse(JSON.stringify(q)), id: uid() };
     if ('x1' in c) { c.x1 += .5; c.x2 += .5; c.y1 += .5; c.y2 += .5; } else if (s.k === 'room' || s.k === 'slab') { c.x = +(q.x + q.w).toFixed(3); c.name = ''; } else { c.x += (pf(q.w) || pf(q.b) || .5) + .2; }
     f[key].push(c); ED.sel = { k: s.k, id: c.id }; renderSel(); drawEd(); changed(); return; }
   if (t.closest('[data-rot]') && ED.sel) { const o = selObj(); o.rot = ((o.rot || 0) + 90) % 360; renderSel(); drawEd(); changed(); buzz(); return; }
   if (t.closest('[data-flip]') && ED.sel) { const o = selObj(); o.flip = o.flip ? 0 : 1; drawEd(); changed(); buzz(); return; }
   const wt = t.closest('[data-wtype] button'); if (wt && ED.sel) { const w = selObj(); w.type = wt.dataset.v; renderSel(); drawEd(); changed(); buzz(); return; }
 });
-function delSel() { if (!ED.sel) return; const f = floor(), key = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs' }[ED.sel.k]; f[key] = f[key].filter(q => q.id !== ED.sel.id); ED.sel = null; renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); toast('Apagado'); }
+function delSel() { if (!ED.sel) return; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; f[key] = f[key].filter(q => q.id !== ED.sel.id); ED.sel = null; renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); toast('Apagado'); }
+document.addEventListener('input', e => { if (e.target.id === 'dbCorner') ED.cornerD = pf(e.target.value) || ED.cornerD; });
 document.addEventListener('input', e => {
   const el = e.target; if (!el.closest || !el.closest('#selPanel')) return;
   const q = selObj(); if (!q) return; const f = floor();
@@ -1284,10 +1362,10 @@ document.addEventListener('keydown', e => {
   if (tab !== 'planta' && !ED.ws) return;
   const inField = e.target.matches && e.target.matches('input, select, textarea');
   if (e.key === 'Enter' && e.target.closest && e.target.closest('#drawBox')) { e.preventDefault(); applyDrawBox(); return; }
-  if (e.key === 'Escape') { if (ED.draw) { ED.draw = null; drawEd(); } else if (ED.tool !== 'mover') setTool('mover'); else if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } else if (ED.ws) openWS(false); return; }
+  if (e.key === 'Escape') { if (ED.vsel) { ED.vsel = null; drawEd(); } else if (ED.draw) { ED.draw = null; drawEd(); } else if (ED.tool !== 'mover') setTool('mover'); else if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } else if (ED.ws) openWS(false); return; }
   if (inField) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && ED.sel) { e.preventDefault(); delSel(); return; }
-  const map = { v: 'mover', w: 'parede', r: 'sala', p: 'pilar', b: 'viga', l: 'laje', d: 'porta', j: 'janela', g: 'portao' };
+  const map = { v: 'mover', w: 'parede', r: 'sala', p: 'pilar', b: 'viga', l: 'laje', d: 'porta', j: 'janela', g: 'portao', k: 'guia', c: 'canto' };
   if (map[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { setTool(map[e.key.toLowerCase()]); return; }
   // escrever números enquanto desenha abre o comprimento
   if (ED.draw && /^[0-9.,]$/.test(e.key)) { const i = $('dbLen') || $('dbW'); if (i) { i.focus(); i.value = e.key === ',' ? '.' : e.key; e.preventDefault(); } }
@@ -1387,7 +1465,7 @@ document.addEventListener('click', e => {
   const gt = t.closest('[data-goto]'); if (gt) { goTab(gt.dataset.goto); return; }
   const fb = t.closest('[data-floor]'); if (fb) { FL = +fb.dataset.floor; ED.ox = -1; ED.sel = null; render(); buzz(); return; }
   if (t.closest('[data-addfloor]')) { const last = p.floors[p.floors.length - 1]; p.floors.push(newFloor(p.floors.length === 1 ? '1.º andar' : `${p.floors.length}.º andar`, last.h)); FL = p.floors.length - 1; ED.ox = -1; changed(1); render(); return; }
-  if (t.closest('[data-dupfloor]')) { const c = JSON.parse(JSON.stringify(f)); c.id = uid(); c.name = f.name + ' (cópia)'; c.rooms.forEach(r => r.id = uid()); c.ops.forEach(o => o.id = uid()); ['walls', 'objs', 'cols', 'beams', 'slabs'].forEach(k => (c[k] || []).forEach(o => o.id = uid())); c.list.rooms.forEach(r => r.id = uid()); p.floors.splice(FL + 1, 0, c); FL++; changed(1); render(); toast('Piso duplicado'); return; }
+  if (t.closest('[data-dupfloor]')) { const c = JSON.parse(JSON.stringify(f)); c.id = uid(); c.name = f.name + ' (cópia)'; c.rooms.forEach(r => r.id = uid()); c.ops.forEach(o => o.id = uid()); ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].forEach(k => (c[k] || []).forEach(o => o.id = uid())); c.list.rooms.forEach(r => r.id = uid()); p.floors.splice(FL + 1, 0, c); FL++; changed(1); render(); toast('Piso duplicado'); return; }
   if (t.closest('[data-delfloor]')) { if (p.floors.length < 2) return; p.floors.splice(FL, 1); FL = Math.max(0, FL - 1); ED.ox = -1; changed(1); render(); toast('Piso apagado'); return; }
   const pm = t.closest('[data-pmode] button'); if (pm) { const v = pm.dataset.v; f.mode = v === 'lista' ? 'lista' : 'desenho'; f.imgMode = v === 'img'; ED.ox = -1; ED.tool = 'mover'; changed(1); render(); if (v === 'img' && !f.img) setTimeout(() => $('imgFile').click(), 150); return; }
   if (t.closest('[data-fit]')) { fitView(); drawEd(); return; }
