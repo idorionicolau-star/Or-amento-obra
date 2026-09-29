@@ -28,6 +28,8 @@ img{max-width:100%}
 
 
 
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -680,6 +682,8 @@ async function loadImage(file) {
 
 
 
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -755,30 +759,39 @@ function fWithout(f, ids) { const o = { ...f }; ['rooms', 'walls', 'beams', 'col
 function nearGuide(f, x, y, tol) { let best = null; (f.guides || []).forEach(g => { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L2 = dx * dx + dy * dy; if (L2 < 1e-9) return; const t = ((x - g.x1) * dx + (y - g.y1) * dy) / L2, px = g.x1 + t * dx, py = g.y1 + t * dy, d = Math.hypot(px - x, py - y); if (d <= tol && (!best || d < best.d)) best = { px, py, d, g }; }); return best; }
 const g5 = v => Math.round(v / .05) * .05;
 function snapAt(f, x, y, from, noOrtho) {
-  const tol = ED.G / 32, pts = snapPoints(f);
+  // tolerância em píxeis do ecrã: maior para o dedo
+  const W = edBox().w, tol = ED.G / W * (ED.touch ? 22 : Math.max(14, W / 32)), aTol = (ED.touch ? 9 : 6) * Math.PI / 180, pts = snapPoints(f);
   if (from) pts.push({ x: from[0], y: from[1], k: 'end' });
   let best = null;
   pts.forEach(p => { const d = Math.hypot(p.x - x, p.y - y); if (d < tol && (!best || d < best.d)) best = { ...p, d }; });
   if (best) return { x: best.x, y: best.y, k: best.k, guides: [] };
-  const on = nearestSeg(f, x, y, tol * .7, true);
-  let rx = x, ry = y, k = 'grid'; const guides = [];
-  const og = on ? null : nearGuide(f, x, y, tol * .7);
-  if (on) { rx = on.px; ry = on.py; k = 'on'; }
-  else if (og) { rx = og.px; ry = og.py; k = 'ong'; }
-  else {
-    // guias de alinhamento com pontos existentes (eixos)
-    let gx = null, gy = null;
-    pts.forEach(p => { if (Math.abs(p.x - x) < tol * .8 && (!gx || Math.abs(p.x - x) < Math.abs(gx.x - x))) gx = p; if (Math.abs(p.y - y) < tol * .8 && (!gy || Math.abs(p.y - y) < Math.abs(gy.y - y))) gy = p; });
-    rx = gx ? gx.x : g5(x); ry = gy ? gy.y : g5(y);
-    if (gx) guides.push({ v: 1, x: gx.x, y0: gx.y, y1: ry }); if (gy) guides.push({ v: 0, y: gy.y, x0: gy.x, x1: rx });
-    if (gx || gy) k = 'guide';
+  // eixos de alinhamento com pontos existentes
+  let gx = null, gy = null;
+  pts.forEach(p => { if (Math.abs(p.x - x) < tol * .8 && (!gx || Math.abs(p.x - x) < Math.abs(gx.x - x))) gx = p; if (Math.abs(p.y - y) < tol * .8 && (!gy || Math.abs(p.y - y) < Math.abs(gy.y - y))) gy = p; });
+  const on = nearestSeg(f, x, y, tol * .7, true), og = on ? null : nearGuide(f, x, y, tol * .7);
+  const guides = [];
+  if (on || og) {
+    // sobre uma parede/linha guia: continua a alinhar (ângulo a partir do início, ou eixo de outro ponto)
+    const Ln = on ? on.s : og.g, seg = !!on, px = on ? on.px : og.px, py = on ? on.py : og.py; let rx = px, ry = py, k = on ? 'on' : 'ong';
+    const hit = (ox, oy, dx, dy) => { const ex = Ln.x2 - Ln.x1, ey = Ln.y2 - Ln.y1, den = dx * ey - dy * ex; if (Math.abs(den) < 1e-9) return null;
+      const t = ((Ln.x1 - ox) * ey - (Ln.y1 - oy) * ex) / den, u = ((Ln.x1 - ox) * dy - (Ln.y1 - oy) * dx) / den; if (seg && (u < -1e-3 || u > 1 + 1e-3)) return null; return [ox + t * dx, oy + t * dy]; };
+    let done = false;
+    if (from && !noOrtho) { const a = Math.atan2(py - from[1], px - from[0]), ar = Math.round(a / (Math.PI / 4)) * (Math.PI / 4);
+      if (Math.abs(a - ar) < aTol) { const q = hit(from[0], from[1], Math.cos(ar), Math.sin(ar)); if (q && Math.hypot(q[0] - px, q[1] - py) < tol * 2) { rx = q[0]; ry = q[1]; done = true; } } }
+    if (!done && gx) { const q = hit(gx.x, gx.y, 0, 1); if (q && Math.hypot(q[0] - px, q[1] - py) < tol) { rx = q[0]; ry = q[1]; guides.push({ v: 1, x: gx.x, y0: gx.y, y1: ry }); done = true; } }
+    if (!done && gy) { const q = hit(gy.x, gy.y, 1, 0); if (q && Math.hypot(q[0] - px, q[1] - py) < tol) { rx = q[0]; ry = q[1]; guides.push({ v: 0, y: gy.y, x0: gy.x, x1: rx }); } }
+    return { x: +rx.toFixed(3), y: +ry.toFixed(3), k, guides };
   }
-  // ângulos 0/45/90 a partir do ponto inicial
-  if (from && !noOrtho && k !== 'on' && k !== 'ong') {
+  let rx = gx ? gx.x : g5(x), ry = gy ? gy.y : g5(y), k = gx || gy ? 'guide' : 'grid';
+  // ângulos 0/45/90 a partir do ponto inicial (mantém o eixo de alinhamento quando coincide)
+  if (from && !noOrtho) {
     const dx = rx - from[0], dy = ry - from[1], L = Math.hypot(dx, dy), a = Math.atan2(dy, dx), st = Math.PI / 4, ar = Math.round(a / st) * st;
-    if (L > 0 && Math.abs(a - ar) < 6 * Math.PI / 180) { const Lp = Math.abs(ar % (Math.PI / 2)) < 1e-6 ? (Math.abs(Math.cos(ar)) > .5 ? Math.abs(dx) : Math.abs(dy)) : L;
-      rx = from[0] + Math.cos(ar) * Lp; ry = from[1] + Math.sin(ar) * Lp; if (k === 'grid') k = 'angle'; }
+    if (L > 0 && Math.abs(a - ar) < aTol) { const ortho = Math.abs(Math.sin(ar)) < 1e-6 || Math.abs(Math.cos(ar)) < 1e-6;
+      if (ortho) { if (Math.abs(Math.sin(ar)) < 1e-6) { ry = from[1]; gy = null; } else { rx = from[0]; gx = null; } }
+      else { const Lp = gx ? (rx - from[0]) / Math.cos(ar) : gy ? (ry - from[1]) / Math.sin(ar) : L; rx = from[0] + Math.cos(ar) * Lp; ry = from[1] + Math.sin(ar) * Lp; if (gx && gy) gy = null; }
+      if (k === 'grid') k = 'angle'; }
   }
+  if (gx) guides.push({ v: 1, x: gx.x, y0: gx.y, y1: ry }); if (gy) guides.push({ v: 0, y: gy.y, x0: gy.x, x1: rx });
   return { x: +rx.toFixed(3), y: +ry.toFixed(3), k, guides };
 }
 function snapMarker(s, G) {
@@ -1333,6 +1346,7 @@ function bindEditor() {
       ED.lp = null; ED.drag = null; drawEd(); return; }
     if (ptrs.size > 2) return;
     const touch = e.pointerType !== 'mouse';
+    ED.touch = touch;
     ED.lp = touch && ED.view === 'plan' ? { cx: e.clientX, cy: e.clientY } : null;
     if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY }; return; }
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
@@ -1379,6 +1393,7 @@ function bindEditor() {
       if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, pinch.z * d / pinch.d)); ED.orb.px = pinch.px + mx - pinch.mx; ED.orb.py = pinch.py + my - pinch.my; drawEd(); }
       else { const r = sv.getBoundingClientRect(), G2 = Math.min(200, Math.max(1.5, pinch.G * pinch.d / d)), k = G2 / r.width; ED.G = G2; ED.ox = pinch.wx - (mx - r.left) * k; ED.oy = pinch.wy - (my - r.top) * k; drawEd(); } } return; }
     const f = ensureF(floor()), d = ED.drag;
+    if (ptrs.size <= 1) ED.touch = e.pointerType !== 'mouse';
     if (ED.lp && e.pointerType !== 'mouse' && ptrs.size === 1) { ED.lp.cx = e.clientX; ED.lp.cy = e.clientY; ED.lp.w = edPt(e); }
     if (ED.view !== 'plan') { if (d && d.kind === 'orbit') { if (ED.view === '3d') { ED.orb.yaw = (ED.orb.yaw - (e.clientX - d.cx) * .5 + 360) % 360; ED.orb.pitch = Math.min(88, Math.max(5, ED.orb.pitch + (e.clientY - d.cy) * .35)); } else { ED.orb.px += e.clientX - d.cx; ED.orb.py += e.clientY - d.cy; } d.cx = e.clientX; d.cy = e.clientY; drawEd(); } return; }
     const [x, y] = edPt(e);
