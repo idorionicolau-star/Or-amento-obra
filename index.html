@@ -23,6 +23,9 @@ img{max-width:100%}
 
 
 
+
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -117,6 +120,29 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .ed-selbar b{font:700 12px var(--body);color:var(--ink);padding:0 8px;overflow:hidden;text-overflow:ellipsis;max-width:90px;min-width:0}
 .ed-selbar button{flex:none;min-width:38px;height:40px;border:0;border-radius:10px;background:var(--surface2);color:var(--ink);font:600 13px var(--body);padding:0 9px;cursor:pointer}
 .ed-selbar button.dz{background:rgba(255,138,122,.16);color:var(--bad)}
+.favbar{position:absolute;left:8px;top:70%;z-index:4;display:flex;align-items:center;gap:3px;padding:4px;border-radius:14px;background:rgba(20,26,24,.96);border:1px solid var(--line2);box-shadow:0 8px 30px rgba(0,0,0,.55);max-width:calc(100% - 8px);overflow-x:auto;scrollbar-width:none;touch-action:none}
+.favbar::-webkit-scrollbar{display:none}
+.favbar.vert{flex-direction:column;max-width:none;max-height:calc(100% - 8px);overflow-x:hidden;overflow-y:auto}
+.favbar.dragging{opacity:.85;box-shadow:0 12px 40px rgba(0,0,0,.8);outline:1px solid var(--accent)}
+.fb-grip{flex:none;width:22px;height:38px;display:grid;place-items:center;color:var(--dim);font:700 14px var(--mono);letter-spacing:-3px;cursor:grab;user-select:none}
+.favbar.vert .fb-grip{width:38px;height:22px;letter-spacing:0;transform:rotate(90deg)}
+.fb-it{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:transparent;color:var(--ink);display:grid;place-items:center;font:600 18px var(--body);cursor:pointer;padding:0}
+.fb-it svg{width:22px;height:22px}
+.fb-it[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.fb-it:disabled{opacity:.3}
+.fb-add{color:var(--accent2);font-size:17px}
+.fb-sep{flex:none;width:1px;height:26px;background:var(--line2);margin:0 2px}
+.favbar.vert .fb-sep{width:26px;height:1px;margin:2px 0}
+.tool,.libit{position:relative}
+.star{position:absolute;top:1px;right:3px;font-size:13px;line-height:1;color:var(--dim);padding:3px;cursor:pointer}
+.star[aria-pressed="true"]{color:var(--accent2)}
+.fp-list{max-height:52vh;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 12px}
+.fp-list .ws-h{grid-column:1/-1;margin-top:6px}
+.fp-it{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px;border:1px solid var(--line2);background:var(--surface2);color:var(--ink);font:600 12px var(--body);text-align:left;cursor:pointer;min-width:0}
+.fp-it span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-it b{color:var(--dim)}.fp-it[aria-pressed="true"]{border-color:var(--accent)}.fp-it[aria-pressed="true"] b{color:var(--accent2)}
+.fp-ic{width:24px;height:24px;display:grid;place-items:center;flex:none}.fp-ic svg{width:22px;height:22px}
+.favpick .seg{margin-bottom:10px}
 .ed-status{position:absolute;left:8px;bottom:8px;font:600 11px var(--mono);color:var(--muted);background:rgba(10,13,12,.85);padding:6px 9px;border-radius:8px;max-width:70%}
 .selpanel{display:grid;gap:10px;padding:12px;border-radius:14px;border:1px solid rgba(255,122,26,.45);background:rgba(255,122,26,.05)}
 .selpanel .ttl{display:flex;justify-content:space-between;align-items:center;font:700 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent2)}
@@ -642,6 +668,9 @@ async function loadImage(file) {
 
 
 
+
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -761,16 +790,88 @@ const SNAP_NAME = { end: 'ponta', mid: 'meio', corner: 'canto', int: 'cruzamento
 /* ---------- HTML ---------- */
 const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${TOOL_ICON[k] || ''}</svg>`;
 function toolbarHTML(vertical) {
-  return TOOLS.map(([g, list]) => `${vertical ? `<div class="ws-h">${g}</div>` : ''}<div class="${vertical ? 'ws-tools' : 'cadgrp'}">${list.map(([k, n, key]) => `<button class="tool${k === 'mover' ? '' : ' go'}" data-tool="${k}" aria-pressed="${ED.tool === k}" title="${n} (${key})">${ico(k)}<span>${n}</span></button>`).join('')}</div>`).join('');
+  return TOOLS.map(([g, list]) => `${vertical ? `<div class="ws-h">${g}</div>` : ''}<div class="${vertical ? 'ws-tools' : 'cadgrp'}">${list.map(([k, n, key]) => `<button class="tool${k === 'mover' ? '' : ' go'}" data-tool="${k}" aria-pressed="${ED.tool === k}" title="${n} (${key})">${ico(k)}<span>${n}</span>${vertical ? starHTML('tool:' + k) : ''}</button>`).join('')}</div>`).join('');
 }
-function libHTML() { return `<div class="libgrid">${Object.entries(OBJ_LIB).map(([k, o]) => `<button class="libit" data-lib="${k}" aria-pressed="${ED.tool === 'place' && ED.place === k}"><svg viewBox="-1.2 -1.2 2.4 2.4">${objSym(k, o.w / Math.max(o.w, o.d) * 2, o.d / Math.max(o.w, o.d) * 2, 1)}</svg><span>${o.n}</span></button>`).join('')}</div>`; }
+function libHTML() { return `<div class="libgrid">${Object.entries(OBJ_LIB).map(([k, o]) => `<button class="libit" data-lib="${k}" aria-pressed="${ED.tool === 'place' && ED.place === k}"><svg viewBox="-1.2 -1.2 2.4 2.4">${objSym(k, o.w / Math.max(o.w, o.d) * 2, o.d / Math.max(o.w, o.d) * 2, 1)}</svg><span>${o.n}</span>${starHTML('lib:' + k)}</button>`).join('')}</div>`; }
 function viewsHTML() { return `<div class="vtabs">${VIEWS.map(([k, n]) => `<button data-view="${k}" aria-pressed="${ED.view === k}">${n}</button>`).join('')}</div>`; }
+/* ---------- favoritos (barra flutuante, como no TradingView) ---------- */
+let FAVS = store.get('oc-favs', ['tool:mover', 'tool:parede', 'tool:porta', 'tool:janela', 'tool:guia']);
+let FAVBAR = store.get('oc-favbar', { fx: .02, fy: .66, vert: 0 });
+const isFav = k => FAVS.includes(k);
+const starHTML = k => `<span class="star" data-fav="${k}" role="button" aria-label="Favorito" aria-pressed="${isFav(k)}">${isFav(k) ? '★' : '☆'}</span>`;
+function favItems() {
+  const all = [];
+  TOOLS.forEach(([, list]) => list.forEach(([k, n]) => all.push({ key: 'tool:' + k, n, g: 'Ferramentas', icon: ico(k) })));
+  all.push({ key: 'tool:objecto', n: 'Objectos (lista)', g: 'Ferramentas', icon: ico('sala') });
+  VIEWS.forEach(([k, n]) => all.push({ key: 'view:' + k, n, g: 'Vistas', icon: `<b style="font:700 11px var(--mono)">${k === 'plan' ? '2D' : k === '3d' ? '3D' : n.replace('Alçado ', '').slice(0, 1)}</b>` }));
+  Object.entries(OBJ_LIB).forEach(([k, o]) => all.push({ key: 'lib:' + k, n: o.n, g: 'Objectos', icon: `<svg viewBox="-1.2 -1.2 2.4 2.4">${objSym(k, o.w / Math.max(o.w, o.d) * 2, o.d / Math.max(o.w, o.d) * 2, 1)}</svg>` }));
+  return all;
+}
+function favBarInner() {
+  const items = favItems(), btn = k => { const it = items.find(i => i.key === k); if (!it) return ''; const [t, v] = k.split(':');
+    const attr = t === 'tool' ? `data-tool="${v}"` : t === 'view' ? `data-view="${v}"` : `data-fblib="${v}"`;
+    return `<button class="fb-it" ${attr} title="${esc(it.n)}" aria-label="${esc(it.n)}">${it.icon}</button>`; };
+  return `<span class="fb-grip" data-fbgrip title="Arraste para mudar de sítio">⋮⋮</span><button class="fb-it" data-undo title="Desfazer (Ctrl+Z)" aria-label="Desfazer" ${HIST.u.length ? '' : 'disabled'}>↶</button><button class="fb-it" data-redo title="Refazer (Ctrl+Y)" aria-label="Refazer" ${HIST.r.length ? '' : 'disabled'}>↷</button><i class="fb-sep"></i>${FAVS.map(btn).join('')}<button class="fb-it fb-add" data-fbedit title="Escolher favoritos" aria-label="Escolher favoritos">☆</button>`;
+}
+function placeFavBar() {
+  const b = $('favBar'); if (!b) return; const w = b.parentElement; b.classList.toggle('vert', !!FAVBAR.vert);
+  const W = w.clientWidth, H = w.clientHeight, bw = b.offsetWidth, bh = b.offsetHeight;
+  b.style.left = Math.max(4, Math.min(W - bw - 4, FAVBAR.fx * W)) + 'px'; b.style.top = Math.max(4, Math.min(H - bh - 4, FAVBAR.fy * H)) + 'px';
+}
+function refreshFavBar() { document.querySelectorAll('#favBar').forEach(b => { b.innerHTML = favBarInner(); }); placeFavBar(); drawEdAria(); }
+function drawEdAria() { document.querySelectorAll('#favBar [data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === ED.tool || (b.dataset.tool === 'objecto' && ED.tool === 'place'))); document.querySelectorAll('#favBar [data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === ED.view)); document.querySelectorAll('#favBar [data-fblib]').forEach(b => b.setAttribute('aria-pressed', ED.tool === 'place' && ED.place === b.dataset.fblib)); }
+function toggleFav(k) { FAVS = isFav(k) ? FAVS.filter(x => x !== k) : [...FAVS, k]; store.set('oc-favs', FAVS); document.querySelectorAll(`[data-fav="${k}"]`).forEach(s => { s.textContent = isFav(k) ? '★' : '☆'; s.setAttribute('aria-pressed', isFav(k)); }); refreshFavBar(); buzz(); }
+function favPicker() {
+  const m = $('modal'); m.hidden = false; const items = favItems(); let g0 = '';
+  m.innerHTML = `<div class="card favpick"><div class="card-title">Favoritos</div><p class="hint">Toque para pôr ou tirar da barra. A barra arrasta-se pelos ⋮⋮ para onde preferir.</p>
+    <div class="fp-list">${items.map(it => { const h = it.g !== g0 ? `<div class="ws-h">${it.g}</div>` : ''; g0 = it.g; return h + `<button class="fp-it" data-favt="${it.key}" aria-pressed="${isFav(it.key)}"><span class="fp-ic">${it.icon}</span><span>${esc(it.n)}</span><b>${isFav(it.key) ? '★' : '☆'}</b></button>`; }).join('')}</div>
+    <div class="seg" data-fborient><button data-v="0" aria-pressed="${!FAVBAR.vert}">Barra deitada</button><button data-v="1" aria-pressed="${!!FAVBAR.vert}">Barra em pé</button></div>
+    <div class="row"><button class="btn ghost" data-fbreset>Repor posição</button><button class="btn primary" data-fbclose>Feito</button></div></div>`;
+}
+document.addEventListener('click', e => {
+  const t = e.target; if (!t.closest || !t.closest('.favpick')) return;
+  const it = t.closest('[data-favt]'); if (it) { toggleFav(it.dataset.favt); it.setAttribute('aria-pressed', isFav(it.dataset.favt)); it.querySelector('b').textContent = isFav(it.dataset.favt) ? '★' : '☆'; return; }
+  const o = t.closest('[data-fborient] button'); if (o) { FAVBAR.vert = +o.dataset.v; store.set('oc-favbar', FAVBAR); o.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === o)); placeFavBar(); return; }
+  if (t.closest('[data-fbreset]')) { FAVBAR = { fx: .02, fy: .66, vert: FAVBAR.vert }; store.set('oc-favbar', FAVBAR); placeFavBar(); toast('Barra reposta'); return; }
+  if (t.closest('[data-fbclose]')) { $('modal').hidden = true; return; }
+});
+// arrastar a barra pelos ⋮⋮
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest && e.target.closest('[data-fbgrip]'); if (!g) return; e.preventDefault(); e.stopPropagation();
+  const b = g.parentElement, w = b.parentElement, r0 = w.getBoundingClientRect(), ox = e.clientX - b.offsetLeft, oy = e.clientY - b.offsetTop; b.classList.add('dragging');
+  const mv = ev => { const W = w.clientWidth, H = w.clientHeight; b.style.left = Math.max(4, Math.min(W - b.offsetWidth - 4, ev.clientX - ox)) + 'px'; b.style.top = Math.max(4, Math.min(H - b.offsetHeight - 4, ev.clientY - oy)) + 'px'; };
+  const upf = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', upf); removeEventListener('pointercancel', upf); b.classList.remove('dragging');
+    FAVBAR.fx = b.offsetLeft / w.clientWidth; FAVBAR.fy = b.offsetTop / w.clientHeight; store.set('oc-favbar', FAVBAR); };
+  addEventListener('pointermove', mv); addEventListener('pointerup', upf); addEventListener('pointercancel', upf);
+}, true);
+addEventListener('resize', () => placeFavBar());
+
+/* ---------- desfazer / refazer ---------- */
+const HIST = { pid: null, u: [], r: [], last: null, t: 0 };
+function histInit() { HIST.pid = CUR; HIST.u = []; HIST.r = []; HIST.last = JSON.stringify(P()); HIST.t = 0; }
+function histRecord() {
+  if (HIST.pid !== CUR) { histInit(); return; }
+  const now = JSON.stringify(P()); if (now === HIST.last) return;
+  // escrever num campo gera muitas alterações seguidas: juntam-se numa só
+  if (!HIST.merge || Date.now() - HIST.t > 1500 || !HIST.u.length) { HIST.u.push(HIST.last); if (HIST.u.length > 80) HIST.u.shift(); }
+  HIST.t = Date.now(); HIST.last = now; HIST.r = []; HIST.merge = false; refreshFavBar();
+}
+function histApply(from, to) {
+  if (HIST.pid !== CUR || !from.length) { toast(from === HIST.u ? 'Nada para desfazer' : 'Nada para refazer'); return; }
+  to.push(JSON.stringify(P())); const snap = from.pop(), i = PROJ.findIndex(p => p.id === CUR);
+  PROJ[i] = JSON.parse(snap); HIST.last = snap; HIST.t = 0;
+  ED.sel = null; ED.vsel = null; ED.draw = null; ED.drag = null; if (FL >= P().floors.length) FL = P().floors.length - 1;
+  save(); render(); refreshFavBar(); buzz(); toast(from === HIST.u ? 'Desfeito' : 'Refeito');
+}
+const undo = () => histApply(HIST.u, HIST.r), redo = () => histApply(HIST.r, HIST.u);
+
 function canvasHTML() {
   return `<div class="ed-wrap">
     <svg class="ed" id="ed" aria-label="Editor da planta" tabindex="0"></svg>
     <div class="ed-zoom"><button class="iconbtn" data-zoom="in" aria-label="Aproximar">+</button><button class="iconbtn" data-zoom="out" aria-label="Afastar">−</button><button class="iconbtn" data-fit aria-label="Ajustar" title="Ajustar">⤢</button></div>
     <div class="ed-status" id="edStatus"></div>
     <div class="ed-selbar" id="edSelBar" hidden></div>
+    <div class="favbar" id="favBar">${favBarInner()}</div>
     <div class="drawbox" id="drawBox" hidden></div>
   </div>`;
 }
@@ -798,7 +899,7 @@ function wsHTML() {
     <div class="ws-body">
       <aside class="ws-left" id="wsLeft">${toolbarHTML(true)}<div class="ws-h">Objectos</div>${libHTML()}
         <div class="ws-h">Tipo de parede nova</div><div class="seg" data-wtdef><button data-v="ext" aria-pressed="${ED.wallType === 'ext'}">Exterior</button><button data-v="int" aria-pressed="${ED.wallType === 'int'}">Interior</button></div>
-        <p class="hint">Atalhos: V seleccionar · W parede · R compartimento · P pilar · B viga · L laje · D porta · J janela · Esc terminar · Del apagar</p></aside>
+        <p class="hint">Atalhos: V seleccionar · W parede · R compartimento · P pilar · B viga · L laje · D porta · J janela · K linha guia · C canto · Ctrl+Z desfazer · Ctrl+Y refazer · Esc terminar · Del apagar · ☆ = pôr na barra de favoritos</p></aside>
       <section class="ws-center">${canvasHTML()}</section>
       <aside class="ws-right" id="wsRight">
         <div class="ws-h">Pisos</div>
@@ -814,7 +915,7 @@ function openWS(on) {
   if (on) { w.hidden = false; document.body.classList.add('wsmode'); ED.ox = -1; render(); try { if (innerWidth > 900 && !IN_FRAME && w.requestFullscreen) w.requestFullscreen().catch(() => {}); } catch (_) {} }
   else { w.hidden = true; w.innerHTML = ''; document.body.classList.remove('wsmode'); try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {} render(); }
 }
-function mountEditor() { if (!$('ed')) return; if (ED.ox === -1) fitView(); bindEditor(); renderSel(); requestAnimationFrame(drawEd); }
+function mountEditor() { if (!$('ed')) return; if (ED.ox === -1) fitView(); bindEditor(); renderSel(); requestAnimationFrame(() => { drawEd(); placeFavBar(); }); }
 function refreshWS() { if (!ED.ws) return; const w = $('ws'); w.innerHTML = wsHTML(); mountEditor(); }
 
 /* ---------- painel de propriedades ---------- */
@@ -917,7 +1018,7 @@ function fitView() {
 const isSel = (k, id) => ED.sel && ED.sel.k === k && ED.sel.id === id;
 function drawEd() {
   const sv = $('ed'); if (!sv) return;
-  renderSelBar();
+  renderSelBar(); drawEdAria();
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === ED.view));
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === ED.tool || (b.dataset.tool === 'objecto' && ED.tool === 'place')));
   document.querySelectorAll('[data-lib]').forEach(b => b.setAttribute('aria-pressed', ED.tool === 'place' && ED.place === b.dataset.lib));
@@ -1314,6 +1415,11 @@ document.addEventListener('click', e => {
   const f = ensureF(floor());
   const wsb = t.closest('[data-ws]'); if (wsb) { openWS(wsb.dataset.ws === 'open'); return; }
   const wsp = t.closest('[data-wsp]'); if (wsp) { $('ws').classList.toggle('show-' + wsp.dataset.wsp); return; }
+  const fv = t.closest('[data-fav]'); if (fv) { e.preventDefault(); toggleFav(fv.dataset.fav); return; }
+  if (t.closest('[data-undo]')) { undo(); return; }
+  if (t.closest('[data-redo]')) { redo(); return; }
+  if (t.closest('[data-fbedit]')) { favPicker(); return; }
+  const fbl = t.closest('[data-fblib]'); if (fbl) { ED.tool = 'place'; ED.place = fbl.dataset.fblib; ED.view = 'plan'; ED.sel = null; ED.draw = null; renderSel(); drawEd(); return; }
   const lib = t.closest('#ws [data-lib]'); if (lib) { ED.tool = 'place'; ED.place = lib.dataset.lib; ED.view = 'plan'; ED.sel = null; renderSel(); drawEd(); return; }
   const tl = t.closest('[data-tool]'); if (tl) { setTool(tl.dataset.tool); return; }
   const wtd = t.closest('[data-wtdef] button'); if (wtd) { ED.wallType = wtd.dataset.v; wtd.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === wtd)); return; }
@@ -1355,7 +1461,7 @@ document.addEventListener('input', e => {
     const L = el.hasAttribute('data-wl') ? num(el.value) : L0, a = el.hasAttribute('data-wa') ? num(el.value) * Math.PI / 180 : a0;
     if (L > 0) { q.x2 = +(q.x1 + Math.cos(a) * L).toFixed(3); q.y2 = +(q.y1 + Math.sin(a) * L).toFixed(3); }
   } else return;
-  drawEd(); changed(); if (ED.ws) refreshSum();
+  HIST.merge = true; drawEd(); changed(); if (ED.ws) refreshSum();
 });
 document.addEventListener('change', e => { if (e.target.matches('#selPanel select')) e.target.dispatchEvent(new Event('input', { bubbles: true })); });
 document.addEventListener('keydown', e => {
@@ -1363,6 +1469,8 @@ document.addEventListener('keydown', e => {
   const inField = e.target.matches && e.target.matches('input, select, textarea');
   if (e.key === 'Enter' && e.target.closest && e.target.closest('#drawBox')) { e.preventDefault(); applyDrawBox(); return; }
   if (e.key === 'Escape') { if (ED.vsel) { ED.vsel = null; drawEd(); } else if (ED.draw) { ED.draw = null; drawEd(); } else if (ED.tool !== 'mover') setTool('mover'); else if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } else if (ED.ws) openWS(false); return; }
+  if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (inField) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && ED.sel) { e.preventDefault(); delSel(); return; }
   const map = { v: 'mover', w: 'parede', r: 'sala', p: 'pilar', b: 'viga', l: 'laje', d: 'porta', j: 'janela', g: 'portao', k: 'guia', c: 'canto' };
@@ -1428,10 +1536,11 @@ function heroPaint() {
   $('hBars').innerHTML = R.stages.map(s => `<div class="sb"><span>${s.name}</span><div class="bar"><i style="transform:scaleX(${s.total / mx})"></i></div><b>${fmt(s.total / 1000, 0)} mil</b></div>`).join('');
 }
 let tmr = null;
-function changed(now) { save(); clearTimeout(tmr); const run = () => { R = calc(P()); heroPaint(); floorStats(); if (tab === 'orc') renderOrc(); }; if (now) run(); else tmr = setTimeout(run, 120); }
+function changed(now) { save(); histRecord(); clearTimeout(tmr); const run = () => { R = calc(P()); heroPaint(); floorStats(); if (tab === 'orc') renderOrc(); }; if (now) run(); else tmr = setTimeout(run, 120); }
 function renderProjSel() { $('projSel').innerHTML = PROJ.map(p => `<option value="${p.id}" ${p.id === CUR ? 'selected' : ''}>${esc(p.name)}</option>`).join(''); }
 function render() {
   if (FL >= P().floors.length) FL = 0;
+  if (HIST.pid !== CUR) histInit();
   const html = tab === 'planta' ? plantaHTML() : tab === 'param' ? paramHTML() : tab === 'precos' ? precosHTML() : orcHTML();
   $('main').innerHTML = html;
   const sec = $('main').firstElementChild; sec.classList.add('show');
