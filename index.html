@@ -26,6 +26,8 @@ img{max-width:100%}
 
 
 
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -120,6 +122,11 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .ed-selbar b{font:700 12px var(--body);color:var(--ink);padding:0 8px;overflow:hidden;text-overflow:ellipsis;max-width:90px;min-width:0}
 .ed-selbar button{flex:none;min-width:38px;height:40px;border:0;border-radius:10px;background:var(--surface2);color:var(--ink);font:600 13px var(--body);padding:0 9px;cursor:pointer}
 .ed-selbar button.dz{background:rgba(255,138,122,.16);color:var(--bad)}
+.loupe{position:absolute;z-index:6;width:132px;height:132px;border-radius:50%;overflow:hidden;border:2px solid var(--accent);background:#0C1110;box-shadow:0 10px 36px rgba(0,0,0,.7);pointer-events:none}
+.loupe svg{width:100%;height:100%;display:block}
+.lp-h,.lp-v{position:absolute;background:rgba(255,178,63,.9)}
+.lp-h{left:50%;top:50%;width:26px;height:1.5px;margin:-.75px 0 0 -13px}.lp-v{left:50%;top:50%;width:1.5px;height:26px;margin:-13px 0 0 -.75px}
+.loupe span{position:absolute;left:0;right:0;bottom:12px;text-align:center;font:700 10px var(--mono);color:#FFB23F;text-shadow:0 1px 3px #000,0 0 6px #000}
 .favbar{position:absolute;left:8px;top:70%;z-index:4;display:flex;align-items:center;gap:3px;padding:4px;border-radius:14px;background:rgba(20,26,24,.96);border:1px solid var(--line2);box-shadow:0 8px 30px rgba(0,0,0,.55);max-width:calc(100% - 8px);overflow-x:auto;scrollbar-width:none;touch-action:none}
 .favbar::-webkit-scrollbar{display:none}
 .favbar.vert{flex-direction:column;max-width:none;max-height:calc(100% - 8px);overflow-x:hidden;overflow-y:auto}
@@ -671,6 +678,8 @@ async function loadImage(file) {
 
 
 
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -871,6 +880,7 @@ function canvasHTML() {
     <div class="ed-zoom"><button class="iconbtn" data-zoom="in" aria-label="Aproximar">+</button><button class="iconbtn" data-zoom="out" aria-label="Afastar">−</button><button class="iconbtn" data-fit aria-label="Ajustar" title="Ajustar">⤢</button></div>
     <div class="ed-status" id="edStatus"></div>
     <div class="ed-selbar" id="edSelBar" hidden></div>
+    <div class="loupe" id="loupe" hidden><svg id="loupeSv" preserveAspectRatio="xMidYMid slice"><use href="#edAll"/></svg><i class="lp-h"></i><i class="lp-v"></i><span id="loupeLbl"></span></div>
     <div class="favbar" id="favBar">${favBarInner()}</div>
     <div class="drawbox" id="drawBox" hidden></div>
   </div>`;
@@ -1078,12 +1088,33 @@ function drawEd() {
   if (ED.snap && ED.tool !== 'mover') s += snapMarker(ED.snap, G);
   if (ED.drag && ED.drag.snap) s += snapMarker(ED.drag.snap, G);
   ED.calib.forEach((q, i) => { s += `<circle cx="${q[0]}" cy="${q[1]}" r="${G / 60}" fill="#FF8A7A" stroke="#fff" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`; if (i) s += `<line x1="${ED.calib[0][0]}" y1="${ED.calib[0][1]}" x2="${q[0]}" y2="${q[1]}" stroke="#FF8A7A" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`; });
-  sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern></defs>` + s;
+  sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern></defs><g id="edAll">` + s + '</g>';
   const g = floorGeom(f), st = $('edStatus');
   const msg = { sala: 'Compartimento: toque num canto e no canto oposto', parede: 'Parede: arraste do início ao fim · toque num vértice para o mover', viga: 'Viga: toque no início e no fim', laje: 'Laje: toque num canto e no canto oposto', pilar: 'Pilar: toque onde o quer (encaixa em pontas e cantos)', guia: 'Linha guia: arraste na direcção, ou toque num ponto e escolha a direcção', canto: 'Canto: toque no vértice onde duas paredes se juntam', porta: 'Toque sobre uma parede', janela: 'Toque sobre uma parede', portao: 'Toque sobre uma parede', place: `Toque para colocar: ${ED.place && OBJ_LIB[ED.place] ? OBJ_LIB[ED.place].n : ''}`, calib: ED.calib.length ? 'Toque na outra ponta da cota' : 'Toque numa ponta de uma cota conhecida' }[ED.tool];
   const sn = ED.snap && ED.tool !== 'mover' && SNAP_NAME[ED.snap.k] ? ` · encaixe: ${SNAP_NAME[ED.snap.k]}` : '';
   if (st) st.textContent = (msg || `${fmt(g.area, 1)} m² · paredes ext ${fmt(g.ext, 1)} m · int ${fmt(g.int, 1)} m`) + sn;
-  drawBoxUI();
+  drawBoxUI(); updLoupe();
+}
+/* lupa (como no MT5): mostra ampliado o ponto debaixo do dedo */
+function updLoupe() {
+  const lp = $('loupe'); if (!lp) return; const L = ED.lp, d = ED.drag;
+  let pt = null, lab = '';
+  if (L && ED.view === 'plan') {
+    if (ED.draw && ED.draw.touch !== 0) { pt = [ED.draw.x1, ED.draw.y1]; const dl = Math.hypot(ED.draw.x1 - ED.draw.x0, ED.draw.y1 - ED.draw.y0); lab = ED.draw.kind === 'room' || ED.draw.kind === 'slab' ? `${fmt(Math.abs(ED.draw.x1 - ED.draw.x0), 2)} × ${fmt(Math.abs(ED.draw.y1 - ED.draw.y0), 2)}` : dl > .01 ? `${fmt(dl, 2)} m` : ''; }
+    else if (d && d.started && d.kind === 'vertex' && ED.vsel) pt = [ED.vsel.x, ED.vsel.y];
+    else if (d && d.started && (d.kind === 'handle' || d.kind === 'move') && d.snap) pt = [d.snap.x, d.snap.y];
+    else if (d && d.started && d.kind === 'move' && L.w) pt = L.w;
+  }
+  if (!pt) { if (!lp.hidden) lp.hidden = true; return; }
+  const sz = 132, Z = 3, { w: W, h: H } = edBox(), span = sz * ED.G / W / Z, sv = $('loupeSv');
+  sv.setAttribute('viewBox', `${pt[0] - span / 2} ${pt[1] - span / 2} ${span} ${span}`);
+  const sn = (d && d.snap) || ED.snap, nm = sn && SNAP_NAME[sn.k] ? SNAP_NAME[sn.k] : '';
+  $('loupeLbl').textContent = [lab, nm].filter(Boolean).join(' · ') || `${fmt(pt[0], 2)} ; ${fmt(pt[1], 2)}`;
+  // fica do lado oposto ao dedo
+  const r = $('ed').getBoundingClientRect(), fx = L.cx - r.left, fy = L.cy - r.top, top = fy > H * .45;
+  lp.style.left = fx > W / 2 ? '8px' : ''; lp.style.right = fx > W / 2 ? '' : '8px';
+  lp.style.top = top ? '62px' : ''; lp.style.bottom = top ? '' : '64px';
+  lp.hidden = false;
 }
 function selObj() { if (!ED.sel) return null; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; return (f[key] || []).find(q => q.id === ED.sel.id); }
 // caixa flutuante de comprimento durante o desenho
@@ -1299,9 +1330,10 @@ function bindEditor() {
       pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), G: ED.G, z: ED.orb.zoom, wx: ED.ox + (mx - r.left) * k, wy: ED.oy + (my - r.top) * k, mx, my, px: ED.orb.px, py: ED.orb.py };
       if (ED.draw && (ED.draw.fresh || ED.draw.touch)) { ED.draw = null; ED.snap = null; }
       if (ED.drag && ED.drag.prevSel !== undefined) ED.sel = ED.drag.prevSel;
-      ED.drag = null; drawEd(); return; }
+      ED.lp = null; ED.drag = null; drawEd(); return; }
     if (ptrs.size > 2) return;
     const touch = e.pointerType !== 'mouse';
+    ED.lp = touch && ED.view === 'plan' ? { cx: e.clientX, cy: e.clientY } : null;
     if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY }; return; }
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
@@ -1347,6 +1379,7 @@ function bindEditor() {
       if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, pinch.z * d / pinch.d)); ED.orb.px = pinch.px + mx - pinch.mx; ED.orb.py = pinch.py + my - pinch.my; drawEd(); }
       else { const r = sv.getBoundingClientRect(), G2 = Math.min(200, Math.max(1.5, pinch.G * pinch.d / d)), k = G2 / r.width; ED.G = G2; ED.ox = pinch.wx - (mx - r.left) * k; ED.oy = pinch.wy - (my - r.top) * k; drawEd(); } } return; }
     const f = ensureF(floor()), d = ED.drag;
+    if (ED.lp && e.pointerType !== 'mouse' && ptrs.size === 1) { ED.lp.cx = e.clientX; ED.lp.cy = e.clientY; ED.lp.w = edPt(e); }
     if (ED.view !== 'plan') { if (d && d.kind === 'orbit') { if (ED.view === '3d') { ED.orb.yaw = (ED.orb.yaw - (e.clientX - d.cx) * .5 + 360) % 360; ED.orb.pitch = Math.min(88, Math.max(5, ED.orb.pitch + (e.clientY - d.cy) * .35)); } else { ED.orb.px += e.clientX - d.cx; ED.orb.py += e.clientY - d.cy; } d.cx = e.clientX; d.cy = e.clientY; drawEd(); } return; }
     const [x, y] = edPt(e);
     if (ED.draw) { const lin = ED.draw.kind === 'wall' || ED.draw.kind === 'beam', sn = snapAt(f, x, y, [ED.draw.x0, ED.draw.y0], !lin); ED.draw.x1 = sn.x; ED.draw.y1 = sn.y; ED.snap = sn; drawEd(); return; }
@@ -1380,6 +1413,7 @@ function bindEditor() {
   });
   const up = e => {
     const had = ptrs.has(e.pointerId); ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+    if (ED.lp) { ED.lp = null; const lpe = $('loupe'); if (lpe) lpe.hidden = true; }
     if (!had) return;
     if (ED.draw && ED.draw.fresh) { const dn = ED.draw.down, moved = Math.hypot(e.clientX - dn[0], e.clientY - dn[1]); ED.draw.fresh = 0;
       if (moved > 12) finishDraw(false);
