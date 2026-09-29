@@ -33,6 +33,8 @@ img{max-width:100%}
 
 
 
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -135,6 +137,7 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .gdirs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}.gdirs .btn{padding:8px 6px}
 .pargrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pargrid .num{grid-column:1/-1}.pargrid .btn{padding:8px 6px}
 .gp-h .btn{padding:6px 10px}
+.dimbox{z-index:7;top:58px;left:50%;right:auto;transform:translateX(-50%);border-color:var(--accent)}
 .gpair{border:1px solid var(--line2);border-radius:12px;padding:10px;display:grid;gap:8px;background:rgba(61,220,151,.05)}
 .gp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;font:700 11px var(--mono)}
 .gp-a{color:#3DDC97}.gp-b{color:var(--accent)}
@@ -697,6 +700,8 @@ async function loadImage(file) {
 
 
 
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -909,6 +914,7 @@ function canvasHTML() {
     <div class="loupe" id="loupe" hidden><svg id="loupeSv" preserveAspectRatio="xMidYMid slice"><use href="#edAll"/></svg><i class="lp-h"></i><i class="lp-v"></i><span id="loupeLbl"></span></div>
     <div class="favbar" id="favBar">${favBarInner()}</div>
     <div class="drawbox" id="drawBox" hidden></div>
+    <div class="drawbox dimbox" id="dimBox" hidden></div>
   </div>`;
 }
 function editorHTML(f, mode) {
@@ -1009,7 +1015,7 @@ function selPanelHTML() {
 function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje', guide: 'Linha guia' }[s.k] || ''; }
 function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || ED.view !== 'plan' || !!ED.draw; if (b.hidden) { b.innerHTML = ''; return; }
   b.innerHTML = `<b>${esc(selName(s))}</b>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
-function renderSel() { if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
+function renderSel() { if (ED.dimEdit && !ED.sel) closeDimEdit(); if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
 function objPicker() {
   const m = $('modal'); m.hidden = false;
   m.innerHTML = `<div class="card"><div class="card-title">Biblioteca de objectos</div>${libHTML()}<button class="btn ghost" data-libclose>Cancelar</button></div>`;
@@ -1116,6 +1122,7 @@ function drawEd() {
   if (ED.sel) { const q = selObj();
     if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>` + H('rect', q.x + q.w, q.y + q.l);
     if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam' || ED.sel.k === 'guide')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
+  if (ED.sel && !ED.gpair && !ED.draw) s += dimsSVG(f, fs); else ED.dims = null;
   if (ED.gpair) { const A = (f.guides || []).find(q => q.id === ED.gpair.a), Bq = (f.guides || []).find(q => q.id === ED.gpair.b);
     if (A && Bq) { const L = Math.hypot(A.x2 - A.x1, A.y2 - A.y1) || 1, ux = (A.x2 - A.x1) / L, uy = (A.y2 - A.y1) / L, E = (G + GH) * 3, c0x = ED.ox + G / 2, c0y = ED.oy + GH / 2, t0 = (c0x - A.x1) * ux + (c0y - A.y1) * uy, bx = A.x1 + ux * t0, by = A.y1 + uy * t0;
       s += `<line x1="${bx - ux * E}" y1="${by - uy * E}" x2="${bx + ux * E}" y2="${by + uy * E}" stroke="#3DDC97" stroke-width="2" stroke-dasharray="10 5 2 5" vector-effect="non-scaling-stroke"/>`;
@@ -1138,7 +1145,7 @@ function drawEd() {
   if (ED.snap && ED.tool !== 'mover') s += snapMarker(ED.snap, G);
   if (ED.drag && ED.drag.snap) s += snapMarker(ED.drag.snap, G);
   ED.calib.forEach((q, i) => { s += `<circle cx="${q[0]}" cy="${q[1]}" r="${G / 60}" fill="#FF8A7A" stroke="#fff" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`; if (i) s += `<line x1="${ED.calib[0][0]}" y1="${ED.calib[0][1]}" x2="${q[0]}" y2="${q[1]}" stroke="#FF8A7A" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`; });
-  sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L10 5L0 9z" fill="#FFB23F"/></marker></defs><g id="edAll">` + s + '</g>';
+  sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern><marker id="arr2" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1L10 5L0 9z" fill="#FF7A1A"/></marker><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L10 5L0 9z" fill="#FFB23F"/></marker></defs><g id="edAll">` + s + '</g>';
   const g = floorGeom(f), st = $('edStatus');
   const msg = { sala: 'Compartimento: toque num canto e no canto oposto', parede: 'Parede: arraste do início ao fim · toque num vértice para o mover', viga: 'Viga: toque no início e no fim', laje: 'Laje: toque num canto e no canto oposto', pilar: 'Pilar: toque onde o quer (encaixa em pontas e cantos)', guia: 'Linha guia: arraste na direcção, ou toque num ponto e escolha a direcção', canto: 'Canto: toque no vértice onde duas paredes se juntam', porta: 'Toque sobre uma parede', janela: 'Toque sobre uma parede', portao: 'Toque sobre uma parede', place: `Toque para colocar: ${ED.place && OBJ_LIB[ED.place] ? OBJ_LIB[ED.place].n : ''}`, calib: ED.calib.length ? 'Toque na outra ponta da cota' : 'Toque numa ponta de uma cota conhecida' }[ED.tool];
   const sn = ED.snap && ED.tool !== 'mover' && SNAP_NAME[ED.snap.k] ? ` · encaixe: ${SNAP_NAME[ED.snap.k]}` : '';
@@ -1167,6 +1174,60 @@ function updLoupe() {
   lp.hidden = false;
 }
 let _raf = 0; const drawSoon = () => { if (!_raf) _raf = requestAnimationFrame(() => { _raf = 0; drawEd(); }); };
+/* ---------- cotas temporárias (distância ao vizinho mais próximo, H e V) ---------- */
+function elBox(k, q, f) {
+  if (!q) return null; const I = Infinity;
+  if (k === 'wall' || k === 'beam') { const t = (k === 'wall' ? wallT(q.type === 'int') : pf(q.b)) / 2, hz = Math.abs(q.y2 - q.y1) < 1e-6, vt = Math.abs(q.x2 - q.x1) < 1e-6;
+    return { x0: Math.min(q.x1, q.x2) - (vt ? t : 0), x1: Math.max(q.x1, q.x2) + (vt ? t : 0), y0: Math.min(q.y1, q.y2) - (hz ? t : 0), y1: Math.max(q.y1, q.y2) + (hz ? t : 0) }; }
+  if (k === 'guide') { if (Math.abs(q.y2 - q.y1) < 1e-6) return { x0: -I, x1: I, y0: q.y1, y1: q.y1, inf: 'h' }; if (Math.abs(q.x2 - q.x1) < 1e-6) return { x0: q.x1, x1: q.x1, y0: -I, y1: I, inf: 'v' }; return null; }
+  if (k === 'obj') { const a = (q.rot || 0) * Math.PI / 180, hw = pf(q.w) / 2, hd = pf(q.d) / 2, ex = Math.abs(Math.cos(a)) * hw + Math.abs(Math.sin(a)) * hd, ey = Math.abs(Math.sin(a)) * hw + Math.abs(Math.cos(a)) * hd; return { x0: q.x - ex, x1: q.x + ex, y0: q.y - ey, y1: q.y + ey }; }
+  if (k === 'col') { const b = pf(q.b) / 2; return { x0: q.x - b, x1: q.x + b, y0: q.y - b, y1: q.y + b }; }
+  if (k === 'room' || k === 'slab') return { x0: q.x, x1: q.x + q.w, y0: q.y, y1: q.y + q.l };
+  return null;
+}
+function tempDims(f) {
+  const S = ED.sel && elBox(ED.sel.k, selObj(), f); if (!S) return null;
+  const sid = ED.sel.id, T = [], isRoom = ED.sel.k === 'room' || ED.sel.k === 'slab';
+  segsOf(f).forEach(sg => { if (sg.wid === sid || (isRoom && !sg.wid)) return; const b = elBox('wall', { x1: sg.x1, y1: sg.y1, x2: sg.x2, y2: sg.y2, type: sg.int ? 'int' : 'ext' }); if (b) T.push(b); });
+  [['beam', 'beams'], ['guide', 'guides'], ['obj', 'objs'], ['col', 'cols']].forEach(([k, key]) => (f[key] || []).forEach(q => { if (q.id === sid) return; const b = elBox(k, q); if (b) T.push(b); }));
+  if (isRoom) (f.rooms || []).forEach(q => { if (q.id !== sid) T.push(elBox('room', q)); });
+  const e = 1e-3, out = {}, fin = v => isFinite(v);
+  const ovY = t => t.y0 <= S.y1 + e && t.y1 >= S.y0 - e, ovX = t => t.x0 <= S.x1 + e && t.x1 >= S.x0 - e;
+  const mid = (a0, a1, b0, b1) => { const lo = Math.max(a0, b0), hi = Math.min(a1, b1); return fin(lo) && fin(hi) ? (lo + hi) / 2 : fin(lo) ? lo : fin(hi) ? hi : 0; };
+  if (S.inf !== 'h') T.forEach(t => { if (!ovY(t)) return;
+    if (fin(S.x1) && t.x0 >= S.x1 - e) { const g = t.x0 - S.x1; if (g > .005 && (!out.R || g < out.R.g)) out.R = { g, a: [S.x1, 0], b: [t.x0, 0], t }; }
+    if (fin(S.x0) && t.x1 <= S.x0 + e) { const g = S.x0 - t.x1; if (g > .005 && (!out.L || g < out.L.g)) out.L = { g, a: [S.x0, 0], b: [t.x1, 0], t }; } });
+  if (S.inf !== 'v') T.forEach(t => { if (!ovX(t)) return;
+    if (fin(S.y1) && t.y0 >= S.y1 - e) { const g = t.y0 - S.y1; if (g > .005 && (!out.D || g < out.D.g)) out.D = { g, a: [0, S.y1], b: [0, t.y0], t }; }
+    if (fin(S.y0) && t.y1 <= S.y0 + e) { const g = S.y0 - t.y1; if (g > .005 && (!out.U || g < out.U.g)) out.U = { g, a: [0, S.y0], b: [0, t.y1], t }; } });
+  const vc = [ED.oy, ED.oy + ED.G * edBox().h / edBox().w], hc = [ED.ox, ED.ox + ED.G];
+  ['L', 'R'].forEach(k => { const d = out[k]; if (!d) return; let y = mid(S.y0, S.y1, d.t.y0, d.t.y1); if (!fin(S.y0)) y = (vc[0] + vc[1]) / 2; d.a[1] = d.b[1] = y; });
+  ['U', 'D'].forEach(k => { const d = out[k]; if (!d) return; let x = mid(S.x0, S.x1, d.t.x0, d.t.x1); if (!fin(S.x0)) x = (hc[0] + hc[1]) / 2; d.a[0] = d.b[0] = x; });
+  return out;
+}
+function dimsSVG(f, fs) {
+  const dm = tempDims(f); ED.dims = dm; if (!dm) return '';
+  let s = ''; const lab = { L: '←', R: '→', U: '↑', D: '↓' };
+  Object.entries(dm).forEach(([k, d]) => { const [ax, ay] = d.a, [bx, by] = d.b, mx = (ax + bx) / 2, my = (ay + by) / 2, txt = fmt(d.g, 2), w = fs * (txt.length * .6 + 1.2), h = fs * 1.5, hz = k === 'L' || k === 'R';
+    s += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#FF7A1A" stroke-width="1.4" vector-effect="non-scaling-stroke" marker-start="url(#arr2)" marker-end="url(#arr2)" pointer-events="none"/>`;
+    s += `<g data-dim="${k}" style="cursor:pointer"><rect x="${mx - w / 2}" y="${my - h / 2 - (hz ? h * .75 : 0)}" width="${w}" height="${h}" rx="${fs * .35}" fill="#FF7A1A"/><text x="${mx}" y="${my + fs * .33 - (hz ? h * .75 : 0)}" text-anchor="middle" font-size="${fs * .95}" font-weight="700" fill="#1A0E04" ${MONO}>${txt}</text></g>`; });
+  return s;
+}
+function moveSelBy(dx, dy) { const q = selObj(), k = ED.sel && ED.sel.k; if (!q) return;
+  if ('x1' in q) { q.x1 = +(q.x1 + dx).toFixed(3); q.x2 = +(q.x2 + dx).toFixed(3); q.y1 = +(q.y1 + dy).toFixed(3); q.y2 = +(q.y2 + dy).toFixed(3); }
+  else { q.x = +(q.x + dx).toFixed(3); q.y = +(q.y + dy).toFixed(3); } }
+function openDimEdit(k) {
+  const d = ED.dims && ED.dims[k], box = $('dimBox'); if (!d || !box) return; ED.dimEdit = k;
+  const nm = { L: 'à esquerda', R: 'à direita', U: 'acima', D: 'abaixo' }[k];
+  box.innerHTML = `<label>Distância ${nm}<input id="dimIn" type="number" inputmode="decimal" step="0.01" value="${+d.g.toFixed(3)}"></label><span>m</span><button class="tool go" data-dimok>OK</button><button class="tool" data-dimx>✕</button>`;
+  box.hidden = false; const i = $('dimIn'); setTimeout(() => { try { i.focus(); i.select(); } catch (_) {} }, 30);
+}
+function applyDimEdit() {
+  const k = ED.dimEdit, d = ED.dims && ED.dims[k], v = pf($('dimIn') && $('dimIn').value); if (!d || !(v >= 0)) { toast('Escreva a distância'); return; }
+  const dv = v - d.g; moveSelBy(k === 'L' ? dv : k === 'R' ? -dv : 0, k === 'U' ? dv : k === 'D' ? -dv : 0);
+  closeDimEdit(); renderSel(); drawEd(); changed(); if (ED.ws) refreshSum(); buzz(); toast(`Distância ${fmt(v, 2)} m`);
+}
+function closeDimEdit() { ED.dimEdit = null; const b = $('dimBox'); if (b) { b.hidden = true; b.innerHTML = ''; } }
 function selObj() { if (!ED.sel) return null; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; return (f[key] || []).find(q => q.id === ED.sel.id); }
 // caixa flutuante de comprimento durante o desenho
 function drawBoxUI() {
@@ -1416,6 +1477,7 @@ function bindEditor() {
     ED.lp = touch && ED.view === 'plan' ? { cx: e.clientX, cy: e.clientY } : null;
     if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY }; return; }
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
+    const dl = e.target.closest && e.target.closest('[data-dim]'); if (dl && ED.sel && !ED.draw) { openDimEdit(dl.dataset.dim); return; }
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
     if (ED.tool === 'canto') { if (touch) ED.drag = { kind: 'tap', cx: e.clientX, cy: e.clientY, x, y, ox: ED.ox, oy: ED.oy, corner: 1 }; else applyCorner(f, x, y, tol); return; }
     const kinds = { parede: 'wall', viga: 'beam', sala: 'room', laje: 'slab', guia: 'guide' };
@@ -1544,6 +1606,8 @@ document.addEventListener('click', e => {
   const vw = t.closest('[data-view]'); if (vw) { ED.view = vw.dataset.view; ED.draw = null; ED.orb.px = ED.orb.py = 0; ED.orb.zoom = 1; if (ED.view !== 'plan') { ED.tool = 'mover'; } drawEd(); buzz(); return; }
   if (t.closest('[data-fit]')) { if (ED.view === 'plan') fitView(); else { ED.orb.zoom = 1; ED.orb.px = ED.orb.py = 0; } drawEd(); return; }
   const zm = t.closest('[data-zoom]'); if (zm) { if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, ED.orb.zoom * (zm.dataset.zoom === 'in' ? 1.3 : .77))); drawEd(); } else zoomTo(ED.G * (zm.dataset.zoom === 'in' ? .75 : 1.33)); return; }
+  if (t.closest('[data-dimok]')) { applyDimEdit(); return; }
+  if (t.closest('[data-dimx]')) { closeDimEdit(); return; }
   if (t.closest('[data-dbok]')) { applyDrawBox(); return; }
   const gdir = t.closest('[data-gdir]'); if (gdir && ED.draw) { const a = +gdir.dataset.gdir * Math.PI / 180; ED.draw.x1 = ED.draw.x0 + Math.cos(a) * 5; ED.draw.y1 = ED.draw.y0 + Math.sin(a) * 5; finishDraw(false); return; }
   const cm = t.closest('[data-cmode] button'); if (cm) { ED.cornerMode = cm.dataset.v; drawBoxUI(); buzz(); return; }
@@ -1590,6 +1654,8 @@ document.addEventListener('change', e => { if (e.target.matches('#selPanel selec
 document.addEventListener('keydown', e => {
   if (tab !== 'planta' && !ED.ws) return;
   const inField = e.target.matches && e.target.matches('input, select, textarea');
+  if (e.key === 'Enter' && e.target.closest && e.target.closest('#dimBox')) { e.preventDefault(); applyDimEdit(); return; }
+  if (e.key === 'Escape' && ED.dimEdit) { closeDimEdit(); return; }
   if (e.key === 'Enter' && e.target.closest && e.target.closest('#drawBox')) { e.preventDefault(); applyDrawBox(); return; }
   if (e.key === 'Escape') { if (ED.vsel) { ED.vsel = null; drawEd(); } else if (ED.draw) { ED.draw = null; drawEd(); } else if (ED.tool !== 'mover') setTool('mover'); else if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } else if (ED.ws) openWS(false); return; }
   if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
