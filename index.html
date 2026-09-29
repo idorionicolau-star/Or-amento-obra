@@ -30,6 +30,9 @@ img{max-width:100%}
 
 
 
+
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -129,6 +132,12 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .lp-h,.lp-v{position:absolute;background:rgba(255,178,63,.9)}
 .lp-h{left:50%;top:50%;width:26px;height:1.5px;margin:-.75px 0 0 -13px}.lp-v{left:50%;top:50%;width:1.5px;height:26px;margin:-13px 0 0 -.75px}
 .loupe span{position:absolute;left:0;right:0;bottom:12px;text-align:center;font:700 10px var(--mono);color:#FFB23F;text-shadow:0 1px 3px #000,0 0 6px #000}
+.gdirs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}.gdirs .btn{padding:8px 6px}
+.pargrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pargrid .num{grid-column:1/-1}.pargrid .btn{padding:8px 6px}
+.gp-h .btn{padding:6px 10px}
+.gpair{border:1px solid var(--line2);border-radius:12px;padding:10px;display:grid;gap:8px;background:rgba(61,220,151,.05)}
+.gp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;font:700 11px var(--mono)}
+.gp-a{color:#3DDC97}.gp-b{color:var(--accent)}
 .favbar{position:absolute;left:8px;top:70%;z-index:4;display:flex;align-items:center;gap:3px;padding:4px;border-radius:14px;background:rgba(20,26,24,.96);border:1px solid var(--line2);box-shadow:0 8px 30px rgba(0,0,0,.55);max-width:calc(100% - 8px);overflow-x:auto;scrollbar-width:none;touch-action:none}
 .favbar::-webkit-scrollbar{display:none}
 .favbar.vert{flex-direction:column;max-width:none;max-height:calc(100% - 8px);overflow-x:hidden;overflow-y:auto}
@@ -308,6 +317,7 @@ body.wsmode .tabbar{display:none}
   .ws-body{position:relative}
   .ws-pbtn{display:inline-flex}
   .ws-top{flex-wrap:wrap}.ws-top .vtabs{order:3;flex-basis:100%}
+  .ws{overflow:hidden}.ws-top .row{flex:1 1 100%;order:2;min-width:0;gap:6px}.ws-top .row .btn{flex:1 1 0;min-width:0;padding:8px 6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ws-brand{max-width:40vw}
 }
 .ws-tools .tool{min-width:0;overflow:hidden}.ws-tools .tool span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -684,6 +694,9 @@ async function loadImage(file) {
 
 
 
+
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -942,12 +955,31 @@ function mountEditor() { if (!$('ed')) return; if (ED.ox === -1) fitView(); bind
 function refreshWS() { if (!ED.ws) return; const w = $('ws'); w.innerHTML = wsHTML(); mountEditor(); }
 
 /* ---------- painel de propriedades ---------- */
+function gDist(A, B) { // distância (com sinal) do meio de B à linha A
+  const L = Math.hypot(A.x2 - A.x1, A.y2 - A.y1) || 1, mx = (B.x1 + B.x2) / 2, my = (B.y1 + B.y2) / 2; return ((mx - A.x1) * -(A.y2 - A.y1) + (my - A.y1) * (A.x2 - A.x1)) / L; }
+const gPar = (A, B) => { const a = Math.atan2(A.y2 - A.y1, A.x2 - A.x1), b = Math.atan2(B.y2 - B.y1, B.x2 - B.x1); let d = Math.abs(a - b) % Math.PI; return Math.min(d, Math.PI - d) < 1e-3; };
+function gpairHTML(f, g) {
+  const pr = ED.gpair, A = pr && f.guides.find(q => q.id === pr.a);
+  if (!pr || !A || pr.b !== g.id) return `<div class="row"><button class="btn primary" data-gpick>↔ Distância a outra linha guia</button></div>${ED.pickGuide ? '<p class="hint" style="color:var(--accent2)">Agora toque na outra linha guia (a que se vai afastar).</p>' : ''}`;
+  const D = Math.abs(gDist(A, g));
+  return `<div class="gpair"><div class="gp-h"><span class="gp-a">1ª fica parada</span><button class="btn ghost" data-gswap title="Trocar qual se move">⇄ Trocar</button><span class="gp-b">2ª afasta-se</span></div>
+    <label class="field"><span>Distância entre as duas${gPar(A, g) ? '' : ' (a 2ª fica paralela à 1ª)'}</span><div class="num"><input type="number" inputmode="decimal" step="0.05" value="${+D.toFixed(3)}" data-gdist><span class="u">m</span></div></label>
+    <div class="row"><button class="btn primary" data-gapply>Aplicar</button><button class="btn ghost" data-gpend>Terminar</button></div></div>`;
+}
+function applyGDist(D) {
+  const f = ensureF(floor()), pr = ED.gpair; if (!pr || !(D >= 0)) return; const A = f.guides.find(q => q.id === pr.a), B = f.guides.find(q => q.id === pr.b); if (!A || !B) return;
+  const L = Math.hypot(A.x2 - A.x1, A.y2 - A.y1) || 1, nx = -(A.y2 - A.y1) / L, ny = (A.x2 - A.x1) / L, sg = gDist(A, B) < 0 ? -1 : 1;
+  // a 2ª fica paralela à 1ª, do mesmo lado onde já estava, à distância pedida (mantém-se perto do sítio onde estava)
+  const mx = (B.x1 + B.x2) / 2, my = (B.y1 + B.y2) / 2, t = (mx - A.x1) * (A.x2 - A.x1) / L + (my - A.y1) * (A.y2 - A.y1) / L, ux = (A.x2 - A.x1) / L, uy = (A.y2 - A.y1) / L, half = Math.max(1, Math.hypot(B.x2 - B.x1, B.y2 - B.y1) / 2);
+  const cxp = A.x1 + ux * t + nx * D * sg, cyp = A.y1 + uy * t + ny * D * sg;
+  Object.assign(B, { x1: +(cxp - ux * half).toFixed(3), y1: +(cyp - uy * half).toFixed(3), x2: +(cxp + ux * half).toFixed(3), y2: +(cyp + uy * half).toFixed(3) });
+}
 function selPanelHTML() {
   const f = ensureF(floor()), s = ED.sel;
   if (!s) return `<p class="hint">Escolha uma ferramenta. <b>Parede/Viga</b>: arraste o dedo do início ao fim de cada parede (no PC: clique no início e no fim, encadeado até Esc). Dois dedos = mover e aproximar a vista. Pode escrever o comprimento exacto. As bolinhas mostram o encaixe: ● ponta, ▲ meio, ■ canto, ✕ sobre a parede; a linha tracejada mostra o alinhamento. <b>Portas/Janelas</b>: toque sobre uma parede. Em <b>Seleccionar</b>, toque num elemento para o editar. <b>Vértice</b>: com a ferramenta Parede, toque na ponta e arraste-a. <b>Linha guia</b>: arraste, ou toque e escolha a direcção; copie paralela à distância certa. <b>Canto</b>: escolha Curva ou Chanfro e toque no vértice.</p>`;
   const head = t => `<div class="ttl"><span>${t}</span><button class="del" data-selclose aria-label="Fechar">×</button></div>`;
   const tail = (dup = true) => `<div class="row">${dup ? '<button class="btn ghost" data-dupsel>Duplicar</button>' : ''}<button class="btn danger" data-delsel>Apagar</button></div>`;
-  const parG = t => `<div class="field"><span>${t} a</span><div class="row" style="gap:6px;flex-wrap:nowrap"><div class="num" style="flex:1"><input id="gparD" type="number" inputmode="decimal" step="0.05" value="${ED.gparD || 1}"><span class="u">m</span></div><button class="btn ghost" data-gpar="1">← lado A</button><button class="btn ghost" data-gpar="-1">lado B →</button></div></div>`;
+  const parG = t => `<div class="field"><span>${t} a</span><div class="pargrid"><div class="num"><input id="gparD" type="number" inputmode="decimal" step="0.05" value="${ED.gparD || 1}"><span class="u">m</span></div><button class="btn ghost" data-gpar="1">← lado A</button><button class="btn ghost" data-gpar="-1">lado B →</button></div></div>`;
   const len = o => Math.hypot(o.x2 - o.x1, o.y2 - o.y1), angd = o => ((Math.atan2(o.y2 - o.y1, o.x2 - o.x1) * 180 / Math.PI) + 360) % 360;
   if (s.k === 'room') { const r = f.rooms.find(q => q.id === s.id); if (!r) return '';
     return `<div class="selpanel">${head('Compartimento')}<div class="fields">${txtF('Nome', r.name, 'data-rf="name"', 'ex.: Sala')}${selF('Tipo', r.type, ROOM_TYPES, 'data-rf="type"')}</div>
@@ -957,8 +989,8 @@ function selPanelHTML() {
       <div class="fields f3">${numF('Comprimento', +len(w).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(w).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Espessura</span><div class="num"><input value="${fmt(wallT(w.type === 'int') * 100, 0)} cm" disabled></div></div></div>
       <p class="hint">O comprimento muda a partir do ponto inicial, mantendo a direcção.</p>${parG('Linha guia paralela à parede')}${tail()}</div>`; }
   if (s.k === 'guide') { const g = f.guides.find(q => q.id === s.id); if (!g) return '';
-    return `<div class="selpanel">${head('Linha guia')}<div class="fields f3">${numF('Ângulo', +(angd(g) % 180).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Direcção</span><div class="row" style="gap:4px"><button class="btn ghost" data-gset="0">—</button><button class="btn ghost" data-gset="90">|</button><button class="btn ghost" data-gset="45">╲</button><button class="btn ghost" data-gset="135">╱</button></div></div></div>
-      ${parG('Copiar paralela')}<p class="hint">As paredes encaixam sobre as linhas guia e nos cruzamentos (■). Não entram no orçamento.</p>${tail(false)}</div>`; }
+    return `<div class="selpanel">${head('Linha guia')}${numF('Ângulo', +(angd(g) % 180).toFixed(1), '°', 'data-wa step="1"')}<div class="gdirs"><button class="btn ghost" data-gset="0">— Horiz.</button><button class="btn ghost" data-gset="90">| Vert.</button><button class="btn ghost" data-gset="45">╲ 45°</button><button class="btn ghost" data-gset="135">╱ 135°</button></div>
+      ${gpairHTML(f, g)}${parG('Copiar paralela')}<p class="hint">As paredes encaixam sobre as linhas guia e nos cruzamentos (■). Não entram no orçamento.</p>${tail(false)}</div>`; }
   if (s.k === 'beam') { const b = f.beams.find(q => q.id === s.id); if (!b) return '';
     return `<div class="selpanel">${head('Viga')}<div class="fields f4">${numF('Comprimento', +len(b).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(b).toFixed(1), '°', 'data-wa step="1"')}${numF('Largura', b.b, 'm', 'data-bf="b" step="0.05"')}${numF('Altura', b.h, 'm', 'data-bf="h" step="0.05"')}</div>${tail()}</div>`; }
   if (s.k === 'col') { const c = f.cols.find(q => q.id === s.id); if (!c) return '';
@@ -975,9 +1007,9 @@ function selPanelHTML() {
   return '';
 }
 function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje', guide: 'Linha guia' }[s.k] || ''; }
-function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; b.hidden = !s || ED.view !== 'plan' || !!ED.draw; if (b.hidden) { b.innerHTML = ''; return; }
+function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || ED.view !== 'plan' || !!ED.draw; if (b.hidden) { b.innerHTML = ''; return; }
   b.innerHTML = `<b>${esc(selName(s))}</b>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
-function renderSel() { const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
+function renderSel() { if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
 function objPicker() {
   const m = $('modal'); m.hidden = false;
   m.innerHTML = `<div class="card"><div class="card-title">Biblioteca de objectos</div>${libHTML()}<button class="btn ghost" data-libclose>Cancelar</button></div>`;
@@ -1084,6 +1116,11 @@ function drawEd() {
   if (ED.sel) { const q = selObj();
     if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>` + H('rect', q.x + q.w, q.y + q.l);
     if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam' || ED.sel.k === 'guide')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
+  if (ED.gpair) { const A = (f.guides || []).find(q => q.id === ED.gpair.a), Bq = (f.guides || []).find(q => q.id === ED.gpair.b);
+    if (A && Bq) { const L = Math.hypot(A.x2 - A.x1, A.y2 - A.y1) || 1, ux = (A.x2 - A.x1) / L, uy = (A.y2 - A.y1) / L, E = (G + GH) * 3, c0x = ED.ox + G / 2, c0y = ED.oy + GH / 2, t0 = (c0x - A.x1) * ux + (c0y - A.y1) * uy, bx = A.x1 + ux * t0, by = A.y1 + uy * t0;
+      s += `<line x1="${bx - ux * E}" y1="${by - uy * E}" x2="${bx + ux * E}" y2="${by + uy * E}" stroke="#3DDC97" stroke-width="2" stroke-dasharray="10 5 2 5" vector-effect="non-scaling-stroke"/>`;
+      const D = gDist(A, Bq), nx = -uy, ny = ux, ex = bx + nx * D, ey = by + ny * D, mx = (bx + ex) / 2, my = (by + ey) / 2;
+      s += `<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="#FFB23F" stroke-width="1.5" vector-effect="non-scaling-stroke" marker-start="url(#arr)" marker-end="url(#arr)"/><g ${MONO} font-weight="700"><rect x="${mx + fs * .3}" y="${my - fs * .7}" width="${fs * 4.2}" height="${fs * 1.3}" rx="${fs * .3}" fill="#0A0D0C" opacity=".85"/><text x="${mx + fs * .6}" y="${my + fs * .25}" font-size="${fs * .85}" fill="#FFB23F">${fmt(Math.abs(D), 2)} m</text></g>`; } }
   if (ED.vsel) s += `<circle cx="${ED.vsel.x}" cy="${ED.vsel.y}" r="${G / 22}" fill="rgba(255,122,26,.18)" stroke="#FF7A1A" stroke-width="2.5" vector-effect="non-scaling-stroke"/><circle cx="${ED.vsel.x}" cy="${ED.vsel.y}" r="${G / 90}" fill="#FF7A1A"/>`;
   // pré-visualização e encaixe
   const d = ED.draw;
@@ -1101,7 +1138,7 @@ function drawEd() {
   if (ED.snap && ED.tool !== 'mover') s += snapMarker(ED.snap, G);
   if (ED.drag && ED.drag.snap) s += snapMarker(ED.drag.snap, G);
   ED.calib.forEach((q, i) => { s += `<circle cx="${q[0]}" cy="${q[1]}" r="${G / 60}" fill="#FF8A7A" stroke="#fff" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`; if (i) s += `<line x1="${ED.calib[0][0]}" y1="${ED.calib[0][1]}" x2="${q[0]}" y2="${q[1]}" stroke="#FF8A7A" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>`; });
-  sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern></defs><g id="edAll">` + s + '</g>';
+  sv.innerHTML = `<defs><pattern id="hatch" width=".3" height=".3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2=".3" stroke="rgba(94,200,229,.18)" stroke-width=".03"/></pattern><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L10 5L0 9z" fill="#FFB23F"/></marker></defs><g id="edAll">` + s + '</g>';
   const g = floorGeom(f), st = $('edStatus');
   const msg = { sala: 'Compartimento: toque num canto e no canto oposto', parede: 'Parede: arraste do início ao fim · toque num vértice para o mover', viga: 'Viga: toque no início e no fim', laje: 'Laje: toque num canto e no canto oposto', pilar: 'Pilar: toque onde o quer (encaixa em pontas e cantos)', guia: 'Linha guia: arraste na direcção, ou toque num ponto e escolha a direcção', canto: 'Canto: toque no vértice onde duas paredes se juntam', porta: 'Toque sobre uma parede', janela: 'Toque sobre uma parede', portao: 'Toque sobre uma parede', place: `Toque para colocar: ${ED.place && OBJ_LIB[ED.place] ? OBJ_LIB[ED.place].n : ''}`, calib: ED.calib.length ? 'Toque na outra ponta da cota' : 'Toque numa ponta de uma cota conhecida' }[ED.tool];
   const sn = ED.snap && ED.tool !== 'mover' && SNAP_NAME[ED.snap.k] ? ` · encaixe: ${SNAP_NAME[ED.snap.k]}` : '';
@@ -1129,6 +1166,7 @@ function updLoupe() {
   lp.style.top = top ? '62px' : ''; lp.style.bottom = top ? '' : '64px';
   lp.hidden = false;
 }
+let _raf = 0; const drawSoon = () => { if (!_raf) _raf = requestAnimationFrame(() => { _raf = 0; drawEd(); }); };
 function selObj() { if (!ED.sel) return null; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; return (f[key] || []).find(q => q.id === ED.sel.id); }
 // caixa flutuante de comprimento durante o desenho
 function drawBoxUI() {
@@ -1221,22 +1259,50 @@ function buildFaces(forElev) {
   });
   return faces;
 }
+/* faces partidas em pedaços pequenos: a ordenação (pintor) fica certa e nada "desaparece" ao girar */
+function subdivFaces(faces) {
+  const out = [], S = 1.2, L3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  faces.forEach(fc => {
+    if (fc.pts.length !== 4 || fc.decal) { out.push({ ...fc, eg: [1, 1, 1, 1] }); return; }
+    const [p0, p1, p2, p3] = fc.pts, vert = Math.abs(fc.n[2]) < .5;
+    const nu = Math.min(24, Math.max(1, Math.ceil(Math.max(L3(p0, p1), L3(p3, p2)) / S))), nv = vert ? 1 : Math.min(24, Math.max(1, Math.ceil(Math.max(L3(p1, p2), L3(p0, p3)) / S)));
+    if (nu === 1 && nv === 1) { out.push({ ...fc, eg: [1, 1, 1, 1] }); return; }
+    const P2 = (u, v) => lerp(lerp(p0, p1, u), lerp(p3, p2, u), v);
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+      const u0 = i / nu, u1 = (i + 1) / nu, v0 = j / nv, v1 = (j + 1) / nv;
+      out.push({ ...fc, pts: [P2(u0, v0), P2(u1, v0), P2(u1, v1), P2(u0, v1)], eg: [j === 0, i === nu - 1, j === nv - 1, i === 0] });
+    }
+  });
+  return out;
+}
+const shade = (hex, k) => { const n = parseInt(hex.slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255, m = v => Math.round(v * (1 - k)); return `rgb(${m(r)},${m(g)},${m(b)})`; };
 function draw3D() {
   const sv = $('ed'), { w: W, h: H } = edBox(), o = ED.orb;
   sv.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const faces = buildFaces(false);
-  if (!faces.length) { sv.innerHTML = `<rect width="${W}" height="${H}" fill="#0C1110"/><text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#5B6561" font-size="13" ${MONO}>Desenhe a planta para ver o 3D</text>`; return; }
+  const key = HIST.last + '|' + FL;
+  if (ED.fc3key !== key || !ED.fc3) { ED.fc3 = subdivFaces(buildFaces(false)); ED.fc3key = key; }
+  const faces = ED.fc3;
+  const bg = `<defs><linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5F8FBF"/><stop offset=".55" stop-color="#A9C6E0"/><stop offset="1" stop-color="#E4EAEE"/></linearGradient><radialGradient id="gnd3" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#B4BAAD"/><stop offset=".62" stop-color="#AAB1A3"/><stop offset="1" stop-color="#AAB1A3" stop-opacity="0"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#sky3)"/>`;
+  if (!faces.length) { sv.innerHTML = bg + `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#2b3230" font-size="13" ${MONO}>Desenhe a planta para ver o 3D</text>`; return; }
   const B = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; faces.forEach(fc => fc.pts.forEach(q => { for (let i = 0; i < 3; i++) { B[i] = Math.min(B[i], q[i]); B[i + 3] = Math.max(B[i + 3], q[i]); } }));
   const th = o.yaw * Math.PI / 180, ph = o.pitch * Math.PI / 180, ct = Math.cos(th), st = Math.sin(th), sp = Math.sin(ph), cp = Math.cos(ph);
   const cx = (B[0] + B[3]) / 2, cy = (B[1] + B[4]) / 2, cz = (B[2] + B[5]) / 2, diag = Math.hypot(B[3] - B[0], B[4] - B[1], B[5] - B[2]) || 1, sc = Math.min(W, H * 1.4) / diag * .95 * o.zoom;
   const Pj = (x, y, z) => { const X = x - cx, Y = y - cy, Z = z - cz, xr = X * ct - Y * st, yr = X * st + Y * ct; return [W / 2 + o.px + xr * sc, H / 2 + o.py + (yr * sp - Z * cp) * sc, yr * cp + Z * sp]; };
-  const vis = n => (n[0] * st + n[1] * ct) * cp + n[2] * sp > 1e-6, L = [-.45, .55, .7];
-  const vf = faces.filter(fc => fc.floor || vis(fc.n)).map(fc => { const pr = fc.pts.map(q => Pj(...q)); return { fc, pr, d: pr.reduce((t, q) => t + q[2], 0) / pr.length + (fc.decal ? .03 : 0) }; });
+  const vis = n => (n[0] * st + n[1] * ct) * cp + n[2] * sp > 1e-6, Lt = [-.45, .55, .7];
+  // chão (terreno) à volta da casa, com quadrícula leve de 1 m
+  const gz = B[2] - .02, R0 = Math.max(6, diag * .85), gx0 = Math.floor(cx - R0), gx1 = Math.ceil(cx + R0), gy0 = Math.floor(cy - R0), gy1 = Math.ceil(cy + R0);
+  const q2 = (x, y) => { const p = Pj(x, y, gz); return p[0].toFixed(1) + ',' + p[1].toFixed(1); };
+  let s = bg + `<polygon points="${q2(gx0, gy0)} ${q2(gx1, gy0)} ${q2(gx1, gy1)} ${q2(gx0, gy1)}" fill="url(#gnd3)"/>`;
+  let gl = ''; const stp = R0 > 40 ? 5 : 1, r2 = Math.round(R0 * .55), hx0 = Math.round(cx) - r2, hx1 = Math.round(cx) + r2, hy0 = Math.round(cy) - r2, hy1 = Math.round(cy) + r2;
+  for (let v = hx0; v <= hx1; v += stp) gl += `M${q2(v, hy0)}L${q2(v, hy1)}`; for (let v = hy0; v <= hy1; v += stp) gl += `M${q2(hx0, v)}L${q2(hx1, v)}`;
+  s += `<path d="${gl}" stroke="rgba(60,70,60,.13)" stroke-width=".6" fill="none"/>`;
+  const vf = [];
+  faces.forEach(fc => { if (!fc.floor && !vis(fc.n)) return; const pr = fc.pts.map(q => Pj(...q)); vf.push({ fc, pr, d: pr.reduce((t, q) => t + q[2], 0) / pr.length + (fc.decal ? .03 : 0) + (fc.floor ? -.02 : 0) }); });
   vf.sort((a, b) => a.d - b.d);
-  let s = `<rect width="${W}" height="${H}" fill="#0C1110"/>`;
-  vf.forEach(({ fc, pr }) => { const pts = pr.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' '), sh = fc.n[2] > .5 ? 0 : Math.max(0, .45 - (fc.n[0] * L[0] + fc.n[1] * L[1]) * .45);
-    s += `<g opacity="${fc.alpha}"><polygon points="${pts}" fill="${fc.fill}" ${fc.stroke ? `stroke="${fc.stroke}" stroke-width="1"` : 'stroke="rgba(0,0,0,.25)" stroke-width=".5"'}/>${sh > .02 ? `<polygon points="${pts}" fill="#000" opacity="${sh.toFixed(2)}"/>` : ''}</g>`; });
-  s += `<text x="10" y="${H - 10}" font-size="10" fill="#5B6561" ${MONO}>arraste = girar · 2 dedos/roda = zoom</text>`;
+  vf.forEach(({ fc, pr }) => { const pts = pr.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' '), sh = fc.n[2] > .5 ? 0 : Math.max(0, .45 - (fc.n[0] * Lt[0] + fc.n[1] * Lt[1]) * .45), col = fc.fill[0] === '#' && fc.fill.length === 7 ? shade(fc.fill, sh) : fc.fill;
+    let eg = ''; if (fc.eg) for (let i = 0; i < pr.length; i++) if (fc.eg[i]) { const a2 = pr[i], b2 = pr[(i + 1) % pr.length]; eg += `M${a2[0].toFixed(1)},${a2[1].toFixed(1)}L${b2[0].toFixed(1)},${b2[1].toFixed(1)}`; }
+    s += `<g${fc.alpha < 1 ? ` opacity="${fc.alpha}"` : ''}><polygon points="${pts}" fill="${col}" stroke="${fc.stroke || col}" stroke-width="${fc.stroke ? 1 : .7}" stroke-linejoin="round"/>${eg && !fc.stroke ? `<path d="${eg}" stroke="rgba(20,25,23,.45)" stroke-width=".8" fill="none"/>` : ''}</g>`; });
+  s += `<text x="10" y="${H - 10}" font-size="10" fill="#2b3230" ${MONO}>arraste = girar · 2 dedos/roda = zoom</text>`;
   sv.innerHTML = s;
   const stt = $('edStatus'); if (stt) stt.textContent = `3D · ${P().floors.length} ${P().floors.length === 1 ? 'piso' : 'pisos'} · piso activo em destaque`;
 }
@@ -1376,6 +1442,9 @@ function bindEditor() {
     if (hd) { const q = selObj(), refs = hd === 'rect' || ED.sel.k === 'guide' ? [] : refsAt(f, q['x' + hd[1]], q['y' + hd[1]]).filter(r => r.w !== q);
       ED.drag = { kind: 'handle', which: hd, cx: e.clientX, cy: e.clientY, started: 0, touch, refs, fx: fWithout(f, new Set([q.id, ...refs.map(r => r.w.id)])) }; return; }
     const hits = hitAll(f, x, y, tol);
+    if ((ED.pickGuide || e.shiftKey) && ED.sel && ED.sel.k === 'guide') { const hg = hits.find(h => h.k === 'guide' && h.id !== ED.sel.id);
+      if (hg) { ED.gpair = { a: ED.sel.id, b: hg.id }; ED.pickGuide = false; ED.sel = { k: 'guide', id: hg.id }; renderSel(); drawEd(); buzz(); if (ED.ws) $('ws').classList.add('show-right'); return; }
+      if (ED.pickGuide) { hintOnce('Toque noutra linha guia'); return; } }
     if (hits.length) {
       const cur = ED.sel && hits.findIndex(h => h.k === ED.sel.k && h.id === ED.sel.id), wasSel = cur != null && cur >= 0, h = wasSel ? hits[cur] : hits[0];
       const q = f[KEYOF[h.k]].find(z => z.id === h.id), prevSel = ED.sel;
@@ -1390,12 +1459,12 @@ function bindEditor() {
   sv.addEventListener('pointermove', e => {
     const pt = ptrs.get(e.pointerId); if (pt) { pt.x = e.clientX; pt.y = e.clientY; }
     if (ptrs.size >= 2 && pinch) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; if (d > 0) {
-      if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, pinch.z * d / pinch.d)); ED.orb.px = pinch.px + mx - pinch.mx; ED.orb.py = pinch.py + my - pinch.my; drawEd(); }
+      if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, pinch.z * d / pinch.d)); ED.orb.px = pinch.px + mx - pinch.mx; ED.orb.py = pinch.py + my - pinch.my; drawSoon(); }
       else { const r = sv.getBoundingClientRect(), G2 = Math.min(200, Math.max(1.5, pinch.G * pinch.d / d)), k = G2 / r.width; ED.G = G2; ED.ox = pinch.wx - (mx - r.left) * k; ED.oy = pinch.wy - (my - r.top) * k; drawEd(); } } return; }
     const f = ensureF(floor()), d = ED.drag;
     if (ptrs.size <= 1) ED.touch = e.pointerType !== 'mouse';
     if (ED.lp && e.pointerType !== 'mouse' && ptrs.size === 1) { ED.lp.cx = e.clientX; ED.lp.cy = e.clientY; ED.lp.w = edPt(e); }
-    if (ED.view !== 'plan') { if (d && d.kind === 'orbit') { if (ED.view === '3d') { ED.orb.yaw = (ED.orb.yaw - (e.clientX - d.cx) * .5 + 360) % 360; ED.orb.pitch = Math.min(88, Math.max(5, ED.orb.pitch + (e.clientY - d.cy) * .35)); } else { ED.orb.px += e.clientX - d.cx; ED.orb.py += e.clientY - d.cy; } d.cx = e.clientX; d.cy = e.clientY; drawEd(); } return; }
+    if (ED.view !== 'plan') { if (d && d.kind === 'orbit') { if (ED.view === '3d') { ED.orb.yaw = (ED.orb.yaw - (e.clientX - d.cx) * .5 + 360) % 360; ED.orb.pitch = Math.min(88, Math.max(5, ED.orb.pitch + (e.clientY - d.cy) * .35)); } else { ED.orb.px += e.clientX - d.cx; ED.orb.py += e.clientY - d.cy; } d.cx = e.clientX; d.cy = e.clientY; drawSoon(); } return; }
     const [x, y] = edPt(e);
     if (ED.draw) { const lin = ED.draw.kind === 'wall' || ED.draw.kind === 'beam', sn = snapAt(f, x, y, [ED.draw.x0, ED.draw.y0], !lin); ED.draw.x1 = sn.x; ED.draw.y1 = sn.y; ED.snap = sn; drawEd(); return; }
     if (!d) {
@@ -1447,7 +1516,7 @@ function bindEditor() {
   sv.addEventListener('pointerleave', () => { if (ED.hover || (ED.snap && !ED.draw)) { ED.hover = null; ED.snap = null; drawEd(); } });
   sv.addEventListener('dblclick', () => { if (ED.draw) { ED.draw = null; drawEd(); } });
   sv.addEventListener('contextmenu', e => { e.preventDefault(); if (ED.draw) { ED.draw = null; drawEd(); } });
-  sv.addEventListener('wheel', e => { e.preventDefault(); if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, ED.orb.zoom * (e.deltaY > 0 ? .88 : 1.14))); drawEd(); } else zoomAtPt(ED.G * (e.deltaY > 0 ? 1.15 : .87), edPt(e)); }, { passive: false });
+  sv.addEventListener('wheel', e => { e.preventDefault(); if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, ED.orb.zoom * (e.deltaY > 0 ? .88 : 1.14))); drawSoon(); } else zoomAtPt(ED.G * (e.deltaY > 0 ? 1.15 : .87), edPt(e)); }, { passive: false });
 }
 function zoomTo(G) { const b = edBox(), ar = b.h / b.w; zoomAtPt(G, [ED.ox + ED.G / 2, ED.oy + ED.G * ar / 2]); }
 function zoomAtPt(G, c) { const b = edBox(), ar = b.h / b.w, G2 = Math.min(200, Math.max(1.5, G)), k = G2 / ED.G; ED.ox = c[0] - (c[0] - ED.ox) * k; ED.oy = c[1] - (c[1] - ED.oy) * k; ED.G = G2; drawEd(); }
@@ -1478,6 +1547,10 @@ document.addEventListener('click', e => {
   if (t.closest('[data-dbok]')) { applyDrawBox(); return; }
   const gdir = t.closest('[data-gdir]'); if (gdir && ED.draw) { const a = +gdir.dataset.gdir * Math.PI / 180; ED.draw.x1 = ED.draw.x0 + Math.cos(a) * 5; ED.draw.y1 = ED.draw.y0 + Math.sin(a) * 5; finishDraw(false); return; }
   const cm = t.closest('[data-cmode] button'); if (cm) { ED.cornerMode = cm.dataset.v; drawBoxUI(); buzz(); return; }
+  if (t.closest('[data-gpick]') && ED.sel) { const keep = ED.sel; if (ED.tool !== 'mover') setTool('mover'); ED.sel = keep; ED.pickGuide = true; renderSel(); drawEd(); if (ED.ws) $('ws').classList.remove('show-right'); toast('Toque na outra linha guia'); return; }
+  if (t.closest('[data-gswap]') && ED.gpair) { ED.gpair = { a: ED.gpair.b, b: ED.gpair.a }; ED.sel = { k: 'guide', id: ED.gpair.b }; renderSel(); drawEd(); buzz(); return; }
+  if (t.closest('[data-gapply]') && ED.gpair) { const i = document.querySelector('[data-gdist]'); applyGDist(pf(i && i.value)); drawEd(); changed(); toast('Distância aplicada'); return; }
+  if (t.closest('[data-gpend]')) { ED.gpair = null; ED.pickGuide = false; renderSel(); drawEd(); return; }
   const gset = t.closest('[data-gset]'); if (gset && ED.sel) { const q = selObj(), a = +gset.dataset.gset * Math.PI / 180, L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 5; q.x2 = +(q.x1 + Math.cos(a) * L).toFixed(3); q.y2 = +(q.y1 + Math.sin(a) * L).toFixed(3); renderSel(); drawEd(); changed(); return; }
   const gp = t.closest('[data-gpar]'); if (gp && ED.sel) { const q = selObj(), D = pf($('gparD') && $('gparD').value); if (!(D > 0)) { toast('Escreva a distância'); return; } ED.gparD = D;
     const L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 1, sg = +gp.dataset.gpar, nx = -(q.y2 - q.y1) / L * D * sg, ny = (q.x2 - q.x1) / L * D * sg, fl = ensureF(floor());
@@ -1504,6 +1577,7 @@ document.addEventListener('input', e => {
   else if (el.dataset.cf) q[el.dataset.cf] = num(el.value);
   else if (el.dataset.bf) q[el.dataset.bf] = num(el.value);
   else if (el.dataset.obf) q[el.dataset.obf] = num(el.value);
+  else if (el.hasAttribute('data-gdist')) { const D = pf(el.value); if (!(D >= 0)) return; applyGDist(D); }
   else if (el.dataset.sof) { q[el.dataset.sof] = el.value; if (el.dataset.sof === 't') { const d = OP_TYPES[q.t]; q.w = d.w; q.h = d.h; snapOp(f, q, q.x, q.y, 1); renderSel(); } refreshOps(); }
   else if (el.hasAttribute('data-wl') || el.hasAttribute('data-wa')) {
     const L0 = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 1, a0 = Math.atan2(q.y2 - q.y1, q.x2 - q.x1);
