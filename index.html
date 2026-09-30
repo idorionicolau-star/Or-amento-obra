@@ -36,6 +36,9 @@ img{max-width:100%}
 
 
 
+
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -129,6 +132,7 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .ed-selbar{position:absolute;left:8px;top:8px;right:8px;margin:0 auto;width:max-content;display:flex;align-items:center;gap:4px;padding:5px;border-radius:14px;background:rgba(20,26,24,.96);border:1px solid var(--line2);box-shadow:0 8px 30px rgba(0,0,0,.6);z-index:3;max-width:calc(100% - 16px);white-space:nowrap}
 .ed-selbar b{font:700 12px var(--body);color:var(--ink);padding:0 8px;overflow:hidden;text-overflow:ellipsis;max-width:90px;min-width:0}
 .ed-selbar button{flex:none;min-width:38px;height:40px;border:0;border-radius:10px;background:var(--surface2);color:var(--ink);font:600 13px var(--body);padding:0 9px;cursor:pointer}
+.ed-selbar button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .ed-selbar button.dz{background:rgba(255,138,122,.16);color:var(--bad)}
 .loupe{position:absolute;z-index:6;width:132px;height:132px;border-radius:50%;overflow:hidden;border:2px solid var(--accent);background:#0C1110;box-shadow:0 10px 36px rgba(0,0,0,.7);pointer-events:none}
 .loupe svg{width:100%;height:100%;display:block}
@@ -391,6 +395,7 @@ const PARAMS = {
   cobertura: 'chapa', incl: 15, beirado: .5, chapaW: .76, chapaL: 3, madeira: 2.5,
   rebocoE: .02, tintaDem: 2, tintaRend: 10,
   acoSap: 50, acoVig: 100, acoPil: 120, acoLaje: 80, acoVerga: 60, varaoD: 10,
+  muroH: 1.8, muroBloco: 15, muroPilEsp: 3,
   maoObra: 0
 };
 const PARAM_UI = [
@@ -399,6 +404,7 @@ const PARAM_UI = [
   ['Estrutura', [['pilB', 'Pilar: lado', 'm'], ['pilEsp', 'Espaçamento de pilares', 'm'], ['pilN', 'Nº de pilares por piso (vazio = automático)', 'un'], ['vigB', 'Viga/cinta: largura', 'm'], ['vigH', 'Viga/cinta: altura', 'm'], ['lajeE', 'Laje: espessura', 'm']]],
   ['Aço (taxas)', [['acoSap', 'Sapatas', 'kg/m³'], ['acoVig', 'Vigas', 'kg/m³'], ['acoPil', 'Pilares', 'kg/m³'], ['acoLaje', 'Lajes', 'kg/m³'], ['acoVerga', 'Vergas', 'kg/m³'], ['varaoD', 'Diâmetro médio do varão', 'mm', [8, 10, 12, 16]]]],
   ['Cobertura', [['cobertura', 'Tipo de cobertura', '', ['chapa', 'laje']], ['incl', 'Inclinação', 'graus'], ['beirado', 'Beirado', 'm'], ['chapaW', 'Chapa: largura útil', 'm'], ['chapaL', 'Chapa: comprimento', 'm'], ['madeira', 'Madeira (barrotes/ripas)', 'm/m²']]],
+  ['Muro de vedação', [['muroH', 'Altura do muro', 'm'], ['muroBloco', 'Bloco do muro', 'cm', [10, 15, 20]], ['muroPilEsp', 'Espaçamento dos pilaretes', 'm']]],
   ['Acabamentos', [['rebocoE', 'Reboco: espessura', 'm'], ['tintaDem', 'Tinta: demãos', 'un'], ['tintaRend', 'Tinta: rendimento', 'm²/L'], ['maoObra', 'Mão de obra', '% materiais']]]
 ];
 const PRICE_ITEMS = [
@@ -414,7 +420,7 @@ const newProject = name => ({ id: uid(), name: name || 'Nova casa', floors: [new
 
 let PROJ = store.get('oc-projects', null);
 if (!PROJ || !PROJ.length) PROJ = [newProject('Minha primeira casa')];
-PROJ.forEach(pr => pr.floors.forEach(f => { ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].forEach(k => f[k] = f[k] || []); }));
+PROJ.forEach(pr => { pr.params = { ...PARAMS, ...pr.params }; }); PROJ.forEach(pr => pr.floors.forEach(f => { ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].forEach(k => f[k] = f[k] || []); }));
 let CUR = store.get('oc-current', PROJ[0].id); if (!PROJ.find(p => p.id === CUR)) CUR = PROJ[0].id;
 let PRICES = store.get('oc-prices', {});
 const P = () => PROJ.find(p => p.id === CUR);
@@ -441,7 +447,7 @@ function floorGeom(f) {
     const foot = C * L || area, ext = C && L ? 2 * (C + L) : 4 * Math.sqrt(area);
     const sumPer = rooms.reduce((t, r) => t + 2 * (pf(r.w) + pf(r.l)), 0);
     const int = Math.max(0, (sumPer - ext) / 2);
-    return { ext, int, area: area || foot, foot, rooms: rooms.map(r => ({ type: r.type, name: r.name, a: pf(r.w) * pf(r.l), per: 2 * (pf(r.w) + pf(r.l)) })) };
+    return { ext, int, fw: [], muro: [], area: area || foot, foot, rooms: rooms.map(r => ({ type: r.type, name: r.name, a: pf(r.w) * pf(r.l), per: 2 * (pf(r.w) + pf(r.l)) })) };
   }
   // desenho: paredes a partir dos lados dos compartimentos (lado partilhado = parede interior)
   const cnt = new Map();
@@ -452,12 +458,13 @@ function floorGeom(f) {
     for (let y = y0; y < y1; y++) { addEdge('v' + x0 + ':' + y); addEdge('v' + x1 + ':' + y); }
   });
   let ext = 0, int = 0; cnt.forEach(c => { if (c === 1) ext += U; else int += U; });
-  (f.walls || []).forEach(w => { const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1); if (w.type === 'ext') ext += L; else int += L; });
+  const fw = [], muro = [];
+  (f.walls || []).forEach(w => { const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1); if (w.type === 'muro') { muro.push({ L, bl: w.bl, h: w.h }); return; } if (w.type === 'ext') ext += L; else int += L; if (pf(w.bl) || pf(w.h)) fw.push({ L, int: w.type === 'int', bl: w.bl, h: w.h }); });
   let area = f.rooms.reduce((t, r) => t + r.w * r.l, 0);
   // só paredes (sem compartimentos): usa as lajes desenhadas ou o rectângulo das paredes exteriores
   if (!area) { area = (f.slabs || []).reduce((t, r) => t + pf(r.w) * pf(r.l), 0);
     if (!area) { const ew = (f.walls || []).filter(w => w.type === 'ext'); if (ew.length) { const xs = ew.flatMap(w => [w.x1, w.x2]), ys = ew.flatMap(w => [w.y1, w.y2]); area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)); } } }
-  return { ext, int, area, foot: area, cnt, rooms: f.rooms.map(r => ({ type: r.type, name: r.name, a: r.w * r.l, per: 2 * (r.w + r.l) })) };
+  return { ext, int, fw, muro, area, foot: area, cnt, rooms: f.rooms.map(r => ({ type: r.type, name: r.name, a: r.w * r.l, per: 2 * (r.w + r.l) })) };
 }
 // segmentos de parede agrupados para desenhar
 function wallRuns(cnt) {
@@ -525,14 +532,34 @@ function calc(p) {
 
   // 3. Paredes
   const W = mk('Paredes');
-  let AE = 0, AI = 0;
-  G.forEach(({ f, g, H }) => { AE += Math.max(0, g.ext * H - opsOf(f, 'ext')); AI += Math.max(0, g.int * H - opsOf(f, 'int')); });
-  const tE = pf(X.blocoExt), tI = pf(X.blocoInt), pm = bpm2(j);
-  add(W, 'bloco' + tE, AE * pm * perd); add(W, 'bloco' + tI, AI * pm * perd);
-  if (j > 0) addMort(W, (AE * tE + AI * tI) / 100 * Math.max(0, 1 - pm * .08) * 1.3, 6);
+  let AE = 0, AI = 0; const tE = pf(X.blocoExt), tI = pf(X.blocoInt), pm = bpm2(j), blk = {}, addB = (b, A) => { if (A > 0) blk[b] = (blk[b] || 0) + A; };
+  let nCustom = 0;
+  G.forEach(({ f, g, H }) => { let ae = g.ext * H - opsOf(f, 'ext'), ai = g.int * H - opsOf(f, 'int');
+    // paredes com bloco ou altura próprios
+    (g.fw || []).forEach(w => { const hh = pf(w.h) || H, b = pf(w.bl) || (w.int ? tI : tE); if (w.int) { ai -= w.L * H; AI += w.L * hh; } else { ae -= w.L * H; AE += w.L * hh; } addB(b, w.L * hh); nCustom++; });
+    ae = Math.max(0, ae); ai = Math.max(0, ai); AE += ae; AI += ai; addB(tE, ae); addB(tI, ai); });
+  Object.entries(blk).forEach(([b, A]) => { add(W, 'bloco' + b, A * pm * perd); if (j > 0) addMort(W, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * 1.3, 6); });
   const Areb = 2 * (AE + AI);
   addMort(W, Areb * pf(X.rebocoE) * 1.15, 4);
-  W.info = [`paredes exteriores ${fmt(AE, 1)} m² (bloco ${tE})`, `interiores ${fmt(AI, 1)} m² (bloco ${tI})`, `reboco ${fmt(Areb, 1)} m²`];
+  W.info = [`paredes exteriores ${fmt(AE, 1)} m² (bloco ${tE})`, `interiores ${fmt(AI, 1)} m² (bloco ${tI})`, ...(nCustom ? [`${nCustom} paredes com bloco/altura próprios`] : []), `reboco ${fmt(Areb, 1)} m²`];
+
+  // 3b. Muro de vedação (paredes marcadas como muro)
+  const muros = G.flatMap(x => x.g.muro || []);
+  let M = null;
+  if (muros.length) {
+    M = mk('Muro de vedação');
+    const hD = pf(X.muroH) || PARAMS.muroH, bD = pf(X.muroBloco) || PARAMS.muroBloco, esp = pf(X.muroPilEsp) || PARAMS.muroPilEsp, byB = {};
+    let Lm = 0, Am = 0, np = 0;
+    muros.forEach(m => { const h = pf(m.h) || hD, b = pf(m.bl) || bD; Lm += m.L; Am += m.L * h; byB[b] = (byB[b] || 0) + m.L * h; np += Math.ceil(m.L / esp) + 1; });
+    Object.entries(byB).forEach(([b, A]) => { add(M, 'bloco' + b, A * pm * perd); if (j > 0) addMort(M, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * 1.3, 6); });
+    const hA = Lm ? Am / Lm : hD, Vl = Lm * pf(X.sapB) * pf(X.limpeza), Vs = Lm * pf(X.sapB) * pf(X.sapH), Vp = np * pf(X.pilB) ** 2 * (hA + pf(X.sapH)), Vc = Lm * pf(X.vigB) * pf(X.vigH);
+    add(M, 'escavacao', Lm * pf(X.sapB) * (pf(X.limpeza) + pf(X.sapH) + .2));
+    addConc(M, Vl, [1, 3, 6]); addConc(M, Vs + Vp + Vc, [1, 2, 3]);
+    addSteel(M, Vs * pf(X.acoSap) + Vp * pf(X.acoPil) + Vc * pf(X.acoVig));
+    add(M, 'cofragem', np * 4 * pf(X.pilB) * hA + Lm * pf(X.vigH) * 2);
+    addMort(M, 2 * Am * pf(X.rebocoE) * 1.15, 4);
+    M.info = [`${fmt(Lm, 1)} m de muro · ${fmt(Am, 1)} m² (altura média ${fmt(hA, 2)} m)`, `${np} pilaretes · cinta de coroamento ${fmt(Vc, 2)} m³`, `sapata corrida ${fmt(Vs, 2)} m³`, `reboco 2 faces ${fmt(2 * Am, 1)} m²`];
+  }
 
   // 4. Cobertura
   const C = mk('Cobertura');
@@ -575,7 +602,7 @@ function calc(p) {
   // lista de compras (tudo somado)
   const shop = {};
   stages.forEach(s => Object.entries(s.mat).forEach(([k, q]) => shop[k] = (shop[k] || 0) + q));
-  return { stages, totMat, mo, total: totMat + mo, areaBuilt, missing, G, shop, aco: (F.aco || 0) + (E.aco || 0) };
+  return { stages, totMat, mo, total: totMat + mo, areaBuilt, missing, G, shop, aco: (F.aco || 0) + (E.aco || 0) + (M && M.aco || 0) };
 }
 
 /* ================= odómetro ================= */
@@ -704,6 +731,9 @@ async function loadImage(file) {
 
 
 
+
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -715,12 +745,13 @@ const OBJ_LIB = {
 const TOOLS = [
   ['Construção', [['mover', 'Seleccionar', 'V'], ['parede', 'Parede', 'W'], ['sala', 'Compartimento', 'R'], ['pilar', 'Pilar', 'P'], ['viga', 'Viga', 'B'], ['laje', 'Laje', 'L']]],
   ['Aberturas', [['porta', 'Porta', 'D'], ['janela', 'Janela', 'J'], ['portao', 'Portão', 'G']]],
-  ['Desenho', [['guia', 'Linha guia', 'K'], ['canto', 'Canto / curva', 'C']]]
+  ['Desenho', [['area', 'Seleccionar área', 'A'], ['guia', 'Linha guia', 'K'], ['canto', 'Canto / curva', 'C']]]
 ];
 const TOOL_ICON = {
   mover: '<path d="M5 3l14 8-6 2-2 6z"/>', parede: '<rect x="3" y="9" width="18" height="6"/>', sala: '<rect x="4" y="4" width="16" height="16"/><path d="M4 12h8V4"/>',
   pilar: '<rect x="8" y="8" width="8" height="8"/><path d="M8 8l8 8M16 8l-8 8"/>', viga: '<path d="M3 10h18v4H3z"/><path d="M7 10v4M17 10v4"/>', laje: '<path d="M3 8l9-4 9 4-9 4z"/><path d="M3 8v3l9 4 9-4V8"/>',
   porta: '<path d="M5 20V5h2"/><path d="M7 5a13 13 0 0 1 12 13"/><path d="M5 20h14"/>', janela: '<rect x="3" y="9" width="18" height="6"/><path d="M3 12h18"/>', portao: '<path d="M3 20V8h18v12"/><path d="M3 12h18M3 16h18"/>',
+  area: '<rect x="3" y="5" width="18" height="14" stroke-dasharray="3 2.5"/><path d="M14 13l6 6M14 13v5M14 13h5"/>',
   guia: '<path d="M2 20L22 4" stroke-dasharray="3 3"/><circle cx="8" cy="15.2" r="1.6"/><circle cx="16" cy="8.8" r="1.6"/>', canto: '<path d="M4 20V12a8 8 0 0 1 8-8h8"/><path d="M4 20h3M17 4v3"/>'
 };
 const KEYOF = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs', guide: 'guides' };
@@ -729,6 +760,10 @@ const ED = { tool: 'mover', sel: null, vsel: null, cornerMode: 'curva', cornerD:
   orb: { yaw: 35, pitch: 32, zoom: 1, px: 0, py: 0 } };
 const floor = () => P().floors[FL] || P().floors[0];
 const wallT = int => pf(P().params[int ? 'blocoInt' : 'blocoExt']) / 100 + .03;
+const muroDef = k => { const X = P().params; return pf(X[k]) || PARAMS[k]; };
+const wBloco = w => pf(w.bl) || (w.type === 'int' ? pf(P().params.blocoInt) : w.type === 'muro' ? muroDef('muroBloco') : pf(P().params.blocoExt));
+const wT = w => wBloco(w) / 100 + .03;
+const WT_COL = { ext: '#E6E1D3', int: '#A9B0AC', muro: '#C9A66B' };
 const VIEWS = [['plan', 'Planta'], ['3d', '3D'], ['S', 'Alçado Sul'], ['N', 'Alçado Norte'], ['E', 'Alçado Este'], ['W', 'Alçado Oeste']];
 const ensureF = f => { ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].forEach(k => f[k] = f[k] || []); return f; };
 
@@ -736,7 +771,7 @@ const ensureF = f => { ['walls', 'objs', 'cols', 'beams', 'slabs', 'guides'].for
 function segsOf(f) {
   const out = [], g = floorGeom(f);
   if (g.cnt) wallRuns(g.cnt).forEach(r => out.push({ ...r }));
-  (f.walls || []).forEach(w => out.push({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, int: w.type === 'int', wid: w.id }));
+  (f.walls || []).forEach(w => out.push({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, int: w.type === 'int', muro: w.type === 'muro', wid: w.id, t: wT(w), h: pf(w.h) || 0, type: w.type }));
   return out;
 }
 function nearestSeg(f, x, y, tol, withBeams) {
@@ -902,7 +937,7 @@ function histApply(from, to) {
   if (HIST.pid !== CUR || !from.length) { toast(from === HIST.u ? 'Nada para desfazer' : 'Nada para refazer'); return; }
   to.push(JSON.stringify(P())); const snap = from.pop(), i = PROJ.findIndex(p => p.id === CUR);
   PROJ[i] = JSON.parse(snap); HIST.last = snap; HIST.t = 0;
-  ED.sel = null; ED.vsel = null; ED.draw = null; ED.drag = null; if (FL >= P().floors.length) FL = P().floors.length - 1;
+  ED.sel = null; ED.msel = null; ED.multi = false; ED.vsel = null; ED.draw = null; ED.drag = null; if (FL >= P().floors.length) FL = P().floors.length - 1;
   save(); render(); refreshFavBar(); buzz(); toast(from === HIST.u ? 'Desfeito' : 'Refeito');
 }
 const undo = () => histApply(HIST.u, HIST.r), redo = () => histApply(HIST.r, HIST.u);
@@ -942,7 +977,7 @@ function wsHTML() {
     </div>
     <div class="ws-body">
       <aside class="ws-left" id="wsLeft">${toolbarHTML(true)}<div class="ws-h">Objectos</div>${libHTML()}
-        <div class="ws-h">Tipo de parede nova</div><div class="seg" data-wtdef><button data-v="ext" aria-pressed="${ED.wallType === 'ext'}">Exterior</button><button data-v="int" aria-pressed="${ED.wallType === 'int'}">Interior</button></div>
+        <div class="ws-h">Tipo de parede nova</div><div class="seg" data-wtdef><button data-v="ext" aria-pressed="${ED.wallType === 'ext'}">Exterior</button><button data-v="int" aria-pressed="${ED.wallType === 'int'}">Interior</button><button data-v="muro" aria-pressed="${ED.wallType === 'muro'}">Muro</button></div>
         <p class="hint">Atalhos: V seleccionar · W parede · R compartimento · P pilar · B viga · L laje · D porta · J janela · K linha guia · C canto · Ctrl+Z desfazer · Ctrl+Y refazer · Esc terminar · Del apagar · ☆ = pôr na barra de favoritos</p></aside>
       <section class="ws-center">${canvasHTML()}</section>
       <aside class="ws-right" id="wsRight">
@@ -982,8 +1017,26 @@ function applyGDist(D) {
   const cxp = A.x1 + ux * t + nx * D * sg, cyp = A.y1 + uy * t + ny * D * sg;
   Object.assign(B, { x1: +(cxp - ux * half).toFixed(3), y1: +(cyp - uy * half).toFixed(3), x2: +(cxp + ux * half).toFixed(3), y2: +(cyp + uy * half).toFixed(3) });
 }
+function wallTypeSeg(t) { const X = P().params; return `<div class="seg" data-wtype><button data-v="ext" aria-pressed="${t === 'ext'}">Exterior</button><button data-v="int" aria-pressed="${t === 'int'}">Interior</button><button data-v="muro" aria-pressed="${t === 'muro'}">Muro</button></div>`; }
+function wallSizeHTML(ws) {
+  const one = (k, d) => { const v = ws.map(w => w[k] || ''); return v.every(x => x === v[0]) ? v[0] : d; };
+  const bl = one('bl', 'mix'), h = one('h', 'mix'), hDef = ws[0].type === 'muro' ? muroDef('muroH') : pf(floor().h);
+  return `<div class="fields">${selF('Bloco', bl === 'mix' || !bl ? '0' : String(bl), { 0: bl === 'mix' ? 'vários' : 'padrão do tipo', 10: 'Bloco 10', 15: 'Bloco 15', 20: 'Bloco 20' }, 'data-wbl')}
+    ${numF('Altura', h === 'mix' ? '' : h, 'm', 'data-wh step="0.05"', bl === 'mix' || h === 'mix' ? 'vários' : `padrão ${fmt(hDef, 2)}`)}</div>`;
+}
+const msel = () => ED.msel && ED.msel.length > 1 ? ED.msel : null;
+function groupPanelHTML(f) {
+  const L = msel(), cnt = {}, nm = { wall: 'paredes', beam: 'vigas', col: 'pilares', obj: 'objectos', op: 'aberturas', room: 'compartimentos', slab: 'lajes', guide: 'linhas guia' };
+  L.forEach(s => cnt[s.k] = (cnt[s.k] || 0) + 1);
+  const walls = L.filter(s => s.k === 'wall').map(s => f.walls.find(w => w.id === s.id)).filter(Boolean), t0 = walls.length && walls.every(w => w.type === walls[0].type) ? walls[0].type : '';
+  return `<div class="selpanel"><div class="ttl"><span>${L.length} seleccionados</span><button class="del" data-selclose aria-label="Fechar">×</button></div>
+    <p class="hint">${Object.entries(cnt).map(([k, n]) => `${n} ${nm[k] || k}`).join(' · ')}. Arraste qualquer um para mover todos.</p>
+    ${walls.length ? `<div class="ws-h">Paredes seleccionadas (${walls.length})</div>${wallTypeSeg(t0)}${wallSizeHTML(walls)}` : ''}
+    <div class="row"><button class="btn ghost" data-dupsel>Duplicar todos</button><button class="btn danger" data-delsel>Apagar todos</button></div></div>`;
+}
 function selPanelHTML() {
   const f = ensureF(floor()), s = ED.sel;
+  if (msel()) return groupPanelHTML(f);
   if (!s) return `<p class="hint">Escolha uma ferramenta. <b>Parede/Viga</b>: arraste o dedo do início ao fim de cada parede (no PC: clique no início e no fim, encadeado até Esc). Dois dedos = mover e aproximar a vista. Pode escrever o comprimento exacto. As bolinhas mostram o encaixe: ● ponta, ▲ meio, ■ canto, ✕ sobre a parede; a linha tracejada mostra o alinhamento. <b>Portas/Janelas</b>: toque sobre uma parede. Em <b>Seleccionar</b>, toque num elemento para o editar. <b>Vértice</b>: com a ferramenta Parede, toque na ponta e arraste-a. <b>Linha guia</b>: arraste, ou toque e escolha a direcção; copie paralela à distância certa. <b>Canto</b>: escolha Curva ou Chanfro e toque no vértice.</p>`;
   const head = t => `<div class="ttl"><span>${t}</span><button class="del" data-selclose aria-label="Fechar">×</button></div>`;
   const tail = (dup = true) => `<div class="row">${dup ? '<button class="btn ghost" data-dupsel>Duplicar</button>' : ''}<button class="btn danger" data-delsel>Apagar</button></div>`;
@@ -993,8 +1046,9 @@ function selPanelHTML() {
     return `<div class="selpanel">${head('Compartimento')}<div class="fields">${txtF('Nome', r.name, 'data-rf="name"', 'ex.: Sala')}${selF('Tipo', r.type, ROOM_TYPES, 'data-rf="type"')}</div>
       <div class="fields f4">${numF('Largura', r.w, 'm', 'data-rf="w" step="0.05"')}${numF('Comprimento', r.l, 'm', 'data-rf="l" step="0.05"')}${numF('X', r.x, 'm', 'data-rf="x" step="0.05"')}${numF('Y', r.y, 'm', 'data-rf="y" step="0.05"')}</div>${tail()}</div>`; }
   if (s.k === 'wall') { const w = f.walls.find(q => q.id === s.id); if (!w) return '';
-    return `<div class="selpanel">${head('Parede')}<div class="seg" data-wtype><button data-v="ext" aria-pressed="${w.type === 'ext'}">Exterior (bloco ${pf(P().params.blocoExt)})</button><button data-v="int" aria-pressed="${w.type === 'int'}">Interior (bloco ${pf(P().params.blocoInt)})</button></div>
-      <div class="fields f3">${numF('Comprimento', +len(w).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(w).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Espessura</span><div class="num"><input value="${fmt(wallT(w.type === 'int') * 100, 0)} cm" disabled></div></div></div>
+    return `<div class="selpanel">${head(w.type === 'muro' ? 'Muro' : 'Parede')}${wallTypeSeg(w.type)}
+      <div class="fields f3">${numF('Comprimento', +len(w).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(w).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Espessura</span><div class="num"><input value="${fmt(wT(w) * 100, 0)} cm" disabled></div></div></div>
+      ${wallSizeHTML([w])}
       <p class="hint">O comprimento muda a partir do ponto inicial, mantendo a direcção.</p>${parG('Linha guia paralela à parede')}${tail()}</div>`; }
   if (s.k === 'guide') { const g = f.guides.find(q => q.id === s.id); if (!g) return '';
     return `<div class="selpanel">${head('Linha guia')}${numF('Ângulo', +(angd(g) % 180).toFixed(1), '°', 'data-wa step="1"')}<div class="gdirs"><button class="btn ghost" data-gset="0">— Horiz.</button><button class="btn ghost" data-gset="90">| Vert.</button><button class="btn ghost" data-gset="45">╲ 45°</button><button class="btn ghost" data-gset="135">╱ 135°</button></div>
@@ -1015,9 +1069,11 @@ function selPanelHTML() {
   return '';
 }
 function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje', guide: 'Linha guia' }[s.k] || ''; }
-function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || ED.view !== 'plan' || !!ED.draw; if (b.hidden) { b.innerHTML = ''; return; }
-  b.innerHTML = `<b>${esc(selName(s))}</b>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
-function renderSel() { if (ED.dimEdit && !ED.sel) closeDimEdit(); if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
+function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.multi && !msel() && !ED.pickGuide) { b.hidden = ED.view !== 'plan'; b.innerHTML = `<b style="max-width:none">Toque para juntar à selecção</b><button data-multi aria-pressed="true">Feito</button>`; if (s && ED.view === 'plan') b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="true">＋ Feito</button><button class="dz" data-delsel>🗑</button><button data-selclose>✕</button>`; return; } if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || ED.view !== 'plan' || !!ED.draw;
+  if (msel() && ED.view === 'plan') b.hidden = false; if (b.hidden) { b.innerHTML = ''; return; }
+  if (msel()) { b.innerHTML = `<b>${ED.msel.length} itens</b><button data-multi aria-pressed="${!!ED.multi}" title="Juntar mais por toque">${ED.multi ? 'Feito' : '＋'}</button><button data-dupsel aria-label="Duplicar">⧉</button><button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; return; }
+  b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="${!!ED.multi}" title="Seleccionar vários" aria-label="Seleccionar vários">＋</button>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
+function renderSel() { if (ED.msel) { const f0 = ensureF(floor()); ED.msel = ED.msel.filter(q => (f0[KEYOF[q.k]] || []).some(z => z.id === q.id)); if (ED.msel.length < 2) ED.msel = null; } if (ED.dimEdit && !ED.sel) closeDimEdit(); if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
 function objPicker() {
   const m = $('modal'); m.hidden = false;
   m.innerHTML = `<div class="card"><div class="card-title">Biblioteca de objectos</div>${libHTML()}<button class="btn ghost" data-libclose>Cancelar</button></div>`;
@@ -1078,7 +1134,7 @@ function fitView() {
   const { w, h } = edBox(), ar = h / w;
   ED.G = Math.max(4, (x1 - x0) * 1.25, (y1 - y0) * 1.25 / ar); ED.ox = x0 - (ED.G - (x1 - x0)) / 2; ED.oy = y0 - (ED.G * ar - (y1 - y0)) / 2;
 }
-const isSel = (k, id) => ED.sel && ED.sel.k === k && ED.sel.id === id;
+const isSel = (k, id) => (ED.sel && ED.sel.k === k && ED.sel.id === id) || !!(ED.msel && ED.msel.length > 1 && ED.msel.some(q => q.k === k && q.id === id));
 function drawEd() {
   const sv = $('ed'); if (!sv) return;
   renderSelBar(); drawEdAria();
@@ -1104,7 +1160,7 @@ function drawEd() {
   (f.objs || []).forEach(o => { s += `<g data-obj="${o.id}" transform="translate(${o.x} ${o.y}) rotate(${o.rot || 0})">${objSym(o.k, pf(o.w), pf(o.d))}${isSel('obj', o.id) ? `<rect x="${-pf(o.w) / 2 - .05}" y="${-pf(o.d) / 2 - .05}" width="${pf(o.w) + .1}" height="${pf(o.d) + .1}" fill="none" stroke="#5EC8E5" stroke-width="2" stroke-dasharray="5 3" vector-effect="non-scaling-stroke"/>` : ''}</g>`; });
   const segs = segsOf(f);
   segs.forEach(l => { const sel = l.wid && isSel('wall', l.wid);
-    s += `<line ${l.wid ? `data-wall="${l.wid}"` : ''} x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="${sel ? '#5EC8E5' : l.int ? '#A9B0AC' : '#E6E1D3'}" stroke-width="${wallT(l.int)}" stroke-linecap="square" ${l.wid ? '' : 'pointer-events="none"'}/>`; });
+    s += `<line ${l.wid ? `data-wall="${l.wid}"` : ''} x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="${sel ? '#5EC8E5' : l.muro ? WT_COL.muro : l.int ? '#A9B0AC' : '#E6E1D3'}" stroke-width="${l.t || wallT(l.int)}" stroke-linecap="square" ${l.wid ? '' : 'pointer-events="none"'}/>`; });
   (f.beams || []).forEach(b => { s += `<line data-beam="${b.id}" x1="${b.x1}" y1="${b.y1}" x2="${b.x2}" y2="${b.y2}" stroke="${isSel('beam', b.id) ? '#5EC8E5' : '#C98A4B'}" stroke-width="${pf(b.b)}" stroke-dasharray="${pf(b.b) * 2} ${pf(b.b)}" opacity=".85"/>`; });
   (f.cols || []).forEach(c => { const b = pf(c.b); s += `<g data-col="${c.id}"><rect x="${c.x - b / 2}" y="${c.y - b / 2}" width="${b}" height="${b}" fill="#5B6561" stroke="${isSel('col', c.id) ? '#5EC8E5' : '#E6E1D3'}" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M${c.x - b / 2} ${c.y - b / 2}l${b} ${b}M${c.x + b / 2} ${c.y - b / 2}l${-b} ${b}" stroke="#E6E1D3" stroke-width="1" vector-effect="non-scaling-stroke"/></g>`; });
   f.ops.filter(o => o.x != null).forEach(o => { s += opSym(f, o, isSel('op', o.id)); });
@@ -1112,7 +1168,7 @@ function drawEd() {
     s += `<line x1="${bx - ux * E}" y1="${by - uy * E}" x2="${bx + ux * E}" y2="${by + uy * E}" stroke="${sel ? '#5EC8E5' : '#FF7A1A'}" stroke-width="${sel ? 2 : 1.2}" stroke-dasharray="10 5 2 5" vector-effect="non-scaling-stroke" opacity="${sel ? 1 : .75}" pointer-events="none"/>`; });
   // cotas
   segs.forEach(l => { const L = Math.hypot(l.x2 - l.x1, l.y2 - l.y1); if (L < .8 || (l.int && !l.wid)) return;
-    const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2, a = Math.atan2(l.y2 - l.y1, l.x2 - l.x1) * 180 / Math.PI, rot = (a > 90 || a < -90) ? a + 180 : a, off = wallT(l.int) / 2 + fs * .55;
+    const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2, a = Math.atan2(l.y2 - l.y1, l.x2 - l.x1) * 180 / Math.PI, rot = (a > 90 || a < -90) ? a + 180 : a, off = (l.t || wallT(l.int)) / 2 + fs * .55;
     const nx = -Math.sin(a * Math.PI / 180) * off, ny = Math.cos(a * Math.PI / 180) * off;
     s += `<text x="${mx - nx}" y="${my - ny}" font-size="${fs * .75}" fill="#5EC8E5" text-anchor="middle" dominant-baseline="middle" transform="rotate(${rot} ${mx - nx} ${my - ny})" ${MONO} pointer-events="none">${fmt(L, 2)}</text>`; });
   f.rooms.forEach(r => {
@@ -1121,15 +1177,16 @@ function drawEd() {
   });
   // pegas da selecção
   const H = (id, x, y) => `<circle data-handle="${id}" cx="${x}" cy="${y}" r="${G / 34}" fill="#5EC8E5" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
-  if (ED.sel) { const q = selObj();
+  if (ED.sel && !msel()) { const q = selObj();
     if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>` + H('rect', q.x + q.w, q.y + q.l);
     if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam' || ED.sel.k === 'guide')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
-  if (ED.sel && !ED.gpair && !ED.draw) s += dimsSVG(f, fs); else ED.dims = null;
+  if (ED.sel && !msel() && !ED.gpair && !ED.draw) s += dimsSVG(f, fs); else ED.dims = null;
   if (ED.gpair) { const A = (f.guides || []).find(q => q.id === ED.gpair.a), Bq = (f.guides || []).find(q => q.id === ED.gpair.b);
     if (A && Bq) { const L = Math.hypot(A.x2 - A.x1, A.y2 - A.y1) || 1, ux = (A.x2 - A.x1) / L, uy = (A.y2 - A.y1) / L, E = (G + GH) * 3, c0x = ED.ox + G / 2, c0y = ED.oy + GH / 2, t0 = (c0x - A.x1) * ux + (c0y - A.y1) * uy, bx = A.x1 + ux * t0, by = A.y1 + uy * t0;
       s += `<line x1="${bx - ux * E}" y1="${by - uy * E}" x2="${bx + ux * E}" y2="${by + uy * E}" stroke="#3DDC97" stroke-width="2" stroke-dasharray="10 5 2 5" vector-effect="non-scaling-stroke"/>`;
       const D = gDist(A, Bq), nx = -uy, ny = ux, ex = bx + nx * D, ey = by + ny * D, mx = (bx + ex) / 2, my = (by + ey) / 2;
       s += `<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="#FFB23F" stroke-width="1.5" vector-effect="non-scaling-stroke" marker-start="url(#arr)" marker-end="url(#arr)"/><g ${MONO} font-weight="700"><rect x="${mx + fs * .3}" y="${my - fs * .7}" width="${fs * 4.2}" height="${fs * 1.3}" rx="${fs * .3}" fill="#0A0D0C" opacity=".85"/><text x="${mx + fs * .6}" y="${my + fs * .25}" font-size="${fs * .85}" fill="#FFB23F">${fmt(Math.abs(D), 2)} m</text></g>`; } }
+  if (ED.drag && ED.drag.kind === 'marq') { const m = ED.drag, cr = m.x1 < m.x0; s += `<rect x="${Math.min(m.x0, m.x1)}" y="${Math.min(m.y0, m.y1)}" width="${Math.abs(m.x1 - m.x0)}" height="${Math.abs(m.y1 - m.y0)}" fill="${cr ? 'rgba(61,220,151,.1)' : 'rgba(94,200,229,.12)'}" stroke="${cr ? '#3DDC97' : '#5EC8E5'}" stroke-width="1.5" ${cr ? 'stroke-dasharray="6 4"' : ''} vector-effect="non-scaling-stroke" pointer-events="none"/>`; }
   if (ED.vsel) s += `<circle cx="${ED.vsel.x}" cy="${ED.vsel.y}" r="${G / 22}" fill="rgba(255,122,26,.18)" stroke="#FF7A1A" stroke-width="2.5" vector-effect="non-scaling-stroke"/><circle cx="${ED.vsel.x}" cy="${ED.vsel.y}" r="${G / 90}" fill="#FF7A1A"/>`;
   // pré-visualização e encaixe
   const d = ED.draw;
@@ -1179,7 +1236,7 @@ let _raf = 0; const drawSoon = () => { if (!_raf) _raf = requestAnimationFrame((
 /* ---------- cotas temporárias (distância ao vizinho mais próximo, H e V) ---------- */
 function elBox(k, q, f) {
   if (!q) return null; const I = Infinity;
-  if (k === 'wall' || k === 'beam') { const t = (k === 'wall' ? wallT(q.type === 'int') : pf(q.b)) / 2, hz = Math.abs(q.y2 - q.y1) < 1e-6, vt = Math.abs(q.x2 - q.x1) < 1e-6;
+  if (k === 'wall' || k === 'beam') { const t = (k === 'wall' ? (q.tt || wT(q)) : pf(q.b)) / 2, hz = Math.abs(q.y2 - q.y1) < 1e-6, vt = Math.abs(q.x2 - q.x1) < 1e-6;
     return { x0: Math.min(q.x1, q.x2) - (vt ? t : 0), x1: Math.max(q.x1, q.x2) + (vt ? t : 0), y0: Math.min(q.y1, q.y2) - (hz ? t : 0), y1: Math.max(q.y1, q.y2) + (hz ? t : 0) }; }
   if (k === 'guide') { if (Math.abs(q.y2 - q.y1) < 1e-6) return { x0: -I, x1: I, y0: q.y1, y1: q.y1, inf: 'h' }; if (Math.abs(q.x2 - q.x1) < 1e-6) return { x0: q.x1, x1: q.x1, y0: -I, y1: I, inf: 'v' }; return null; }
   if (k === 'obj') { const a = (q.rot || 0) * Math.PI / 180, hw = pf(q.w) / 2, hd = pf(q.d) / 2, ex = Math.abs(Math.cos(a)) * hw + Math.abs(Math.sin(a)) * hd, ey = Math.abs(Math.sin(a)) * hw + Math.abs(Math.cos(a)) * hd; return { x0: q.x - ex, x1: q.x + ex, y0: q.y - ey, y1: q.y + ey }; }
@@ -1190,7 +1247,7 @@ function elBox(k, q, f) {
 function tempDims(f) {
   const S = ED.sel && elBox(ED.sel.k, selObj(), f); if (!S) return null;
   const sid = ED.sel.id, T = [], isRoom = ED.sel.k === 'room' || ED.sel.k === 'slab';
-  segsOf(f).forEach(sg => { if (sg.wid === sid || (isRoom && !sg.wid)) return; const b = elBox('wall', { x1: sg.x1, y1: sg.y1, x2: sg.x2, y2: sg.y2, type: sg.int ? 'int' : 'ext' }); if (b) T.push(b); });
+  segsOf(f).forEach(sg => { if (sg.wid === sid || (isRoom && !sg.wid)) return; const b = elBox('wall', { x1: sg.x1, y1: sg.y1, x2: sg.x2, y2: sg.y2, type: sg.int ? 'int' : 'ext', tt: sg.t }); if (b) T.push(b); });
   [['beam', 'beams'], ['guide', 'guides'], ['obj', 'objs'], ['col', 'cols']].forEach(([k, key]) => (f[key] || []).forEach(q => { if (q.id === sid) return; const b = elBox(k, q); if (b) T.push(b); }));
   if (isRoom) (f.rooms || []).forEach(q => { if (q.id !== sid) T.push(elBox('room', q)); });
   const e = 1e-3, out = {}, fin = v => isFinite(v);
@@ -1302,8 +1359,8 @@ function buildFaces(forElev) {
     f.rooms.forEach(r => quad([[r.x, r.y, z0 + .01], [r.x + r.w, r.y, z0 + .01], [r.x + r.w, r.y + r.l, z0 + .01], [r.x, r.y + r.l, z0 + .01]], [0, 0, 1], '#3a403d', { ...ex, floor: 1 }));
     segsOf(f).forEach(sg => {
       const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1); if (L < 1e-3) return;
-      const ux = (sg.x2 - sg.x1) / L, uy = (sg.y2 - sg.y1) / L, nx = -uy, ny = ux, t = wallT(sg.int) / 2;
-      box([[sg.x1 + nx * t, sg.y1 + ny * t], [sg.x2 + nx * t, sg.y2 + ny * t], [sg.x2 - nx * t, sg.y2 - ny * t], [sg.x1 - nx * t, sg.y1 - ny * t]], z0, z0 + H0, sg.int ? '#AEB5B1' : '#E6E1D3', '#C9CFCB', { ...ex, wall: 1 });
+      const ux = (sg.x2 - sg.x1) / L, uy = (sg.y2 - sg.y1) / L, nx = -uy, ny = ux, t = (sg.t || wallT(sg.int)) / 2, Hw = sg.h || (sg.muro ? muroDef('muroH') : H0);
+      box([[sg.x1 + nx * t, sg.y1 + ny * t], [sg.x2 + nx * t, sg.y2 + ny * t], [sg.x2 - nx * t, sg.y2 - ny * t], [sg.x1 - nx * t, sg.y1 - ny * t]], z0, z0 + Hw, sg.muro ? '#CDB48C' : sg.int ? '#AEB5B1' : '#E6E1D3', sg.muro ? '#D8C4A0' : '#C9CFCB', { ...ex, wall: 1 });
       f.ops.filter(op => op.x != null).forEach(op => {
         const dx = op.x - sg.x1, dy = op.y - sg.y1, along = dx * ux + dy * uy, off = Math.abs(dx * nx + dy * ny);
         if (off > .05 || along < -.01 || along > L + .01) return;
@@ -1409,7 +1466,7 @@ function hitAll(f, x, y, tol) {
   (f.cols || []).forEach(c => add('col', c.id, boxD(c.x, c.y, pf(c.b), pf(c.b), 0), 0));
   (f.objs || []).forEach(o => add('obj', o.id, boxD(o.x, o.y, pf(o.w), pf(o.d), o.rot), 1));
   (f.beams || []).forEach(b => add('beam', b.id, Math.max(0, segD(b.x1, b.y1, b.x2, b.y2) - pf(b.b) / 2), 2));
-  (f.walls || []).forEach(w => add('wall', w.id, Math.max(0, segD(w.x1, w.y1, w.x2, w.y2) - wallT(w.type === 'int') / 2), 2));
+  (f.walls || []).forEach(w => add('wall', w.id, Math.max(0, segD(w.x1, w.y1, w.x2, w.y2) - wT(w) / 2), 2));
   (f.guides || []).forEach(g => { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L = Math.hypot(dx, dy); if (L < 1e-9) return; add('guide', g.id, Math.abs((x - g.x1) * dy - (y - g.y1) * dx) / L, 2.5); });
   f.rooms.forEach(r => add('room', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 3));
   (f.slabs || []).forEach(r => add('slab', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 4));
@@ -1460,12 +1517,31 @@ function applyCorner(f, x, y, tol) {
   for (let i = 0; i < pts.length - 1; i++) f.walls.push({ id: uid(), x1: +pts[i][0].toFixed(3), y1: +pts[i][1].toFixed(3), x2: +pts[i + 1][0].toFixed(3), y2: +pts[i + 1][1].toFixed(3), type, grp: gid });
   ED.vsel = null; buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum(); toast(ED.cornerMode === 'curva' ? 'Canto arredondado' : 'Chanfro feito');
 }
+/* selecção múltipla */
+function toggleMulti(k, id) {
+  let L = ED.msel && ED.msel.length ? ED.msel.slice() : (ED.sel ? [ED.sel] : []); const i = L.findIndex(q => q.k === k && q.id === id);
+  if (i >= 0) L.splice(i, 1); else L.push({ k, id });
+  ED.msel = L; ED.sel = L.length ? L[L.length - 1] : null; if (L.length < 2) ED.msel = null;
+  renderSel(); drawEd(); buzz();
+}
+function opBox(o) { const a = o.ang || 0, hw = pf(o.w) / 2; return { x0: o.x - Math.abs(Math.cos(a)) * hw, x1: o.x + Math.abs(Math.cos(a)) * hw, y0: o.y - Math.abs(Math.sin(a)) * hw, y1: o.y + Math.abs(Math.sin(a)) * hw }; }
+function marqSelect(f, d, add) {
+  const x0 = Math.min(d.x0, d.x1), x1 = Math.max(d.x0, d.x1), y0 = Math.min(d.y0, d.y1), y1 = Math.max(d.y0, d.y1), cross = d.x1 < d.x0, out = add && ED.msel ? ED.msel.slice() : add && ED.sel ? [ED.sel] : [];
+  const test = b => b && isFinite(b.x0) && isFinite(b.y0) && (cross ? b.x0 <= x1 && b.x1 >= x0 && b.y0 <= y1 && b.y1 >= y0 : b.x0 >= x0 && b.x1 <= x1 && b.y0 >= y0 && b.y1 <= y1);
+  const push = (k, id) => { if (!out.some(q => q.k === k && q.id === id)) out.push({ k, id }); };
+  [['wall', 'walls'], ['beam', 'beams'], ['obj', 'objs'], ['col', 'cols'], ['room', 'rooms'], ['slab', 'slabs']].forEach(([k, key]) => (f[key] || []).forEach(q => { if (test(elBox(k, q))) push(k, q.id); }));
+  f.ops.forEach(o => { if (o.x != null && test(opBox(o))) push('op', o.id); });
+  ED.msel = out.length > 1 ? out : null; ED.sel = out.length ? out[out.length - 1] : null;
+  return out.length;
+}
+function selItems(f) { const L = msel() || (ED.sel ? [ED.sel] : []); return L.map(s => ({ s, q: (f[KEYOF[s.k]] || []).find(z => z.id === s.id) })).filter(x => x.q); }
 let _hintT = 0; const hintOnce = m => { if (Date.now() - _hintT > 2500) { _hintT = Date.now(); toast(m); } };
 function bindEditor() {
   const sv = $('ed'); if (!sv || sv._b) return; sv._b = 1;
   const ptrs = new Map(); let pinch = null;
   sv.addEventListener('pointerdown', e => {
-    if (e.button === 2) return; e.preventDefault(); try { sv.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault(); try { sv.setPointerCapture(e.pointerId); } catch (_) {}
+    if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2)) { if (ED.view === 'plan') { ptrs.clear(); ED.drag = { kind: 'pan', cx: e.clientX, cy: e.clientY, ox: ED.ox, oy: ED.oy, rb: e.button }; } return; }
     if (e.isPrimary) ptrs.clear(); // um toque novo começa sempre limpo (evita dedos "presos")
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], r = sv.getBoundingClientRect(), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, k = ED.G / r.width;
@@ -1481,6 +1557,7 @@ function bindEditor() {
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
     const dl = ED.tool === 'mover' && e.target.closest && e.target.closest('[data-dim]'); if (dl && ED.sel && !ED.draw) { openDimEdit(dl.dataset.dim); return; }
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
+    if (ED.tool === 'area') { ED.drag = { kind: 'marq', x0: x, y0: y, x1: x, y1: y, cx: e.clientX, cy: e.clientY, add: e.shiftKey || ED.multi }; return; }
     if (ED.tool === 'canto') { if (touch) ED.drag = { kind: 'tap', cx: e.clientX, cy: e.clientY, x, y, ox: ED.ox, oy: ED.oy, corner: 1 }; else applyCorner(f, x, y, tol); return; }
     const kinds = { parede: 'wall', viga: 'beam', sala: 'room', laje: 'slab', guia: 'guide' };
     // vértice seleccionado: arrastá-lo move as pontas de todas as paredes/vigas ligadas a ele
@@ -1502,7 +1579,7 @@ function bindEditor() {
       placeAt(f, x, y, false); return;
     }
     // seleccionar / mover
-    const hd = ED.sel && handleAt(x, y, tol * 1.2);
+    const hd = ED.sel && !msel() && handleAt(x, y, tol * 1.2);
     if (hd) { const q = selObj(), refs = hd === 'rect' || ED.sel.k === 'guide' ? [] : refsAt(f, q['x' + hd[1]], q['y' + hd[1]]).filter(r => r.w !== q);
       ED.drag = { kind: 'handle', which: hd, cx: e.clientX, cy: e.clientY, started: 0, touch, refs, fx: fWithout(f, new Set([q.id, ...refs.map(r => r.w.id)])) }; return; }
     const hits = hitAll(f, x, y, tol);
@@ -1510,13 +1587,19 @@ function bindEditor() {
       if (hg) { ED.gpair = { a: ED.sel.id, b: hg.id }; ED.pickGuide = false; ED.sel = { k: 'guide', id: hg.id }; renderSel(); drawEd(); buzz(); if (ED.ws) $('ws').classList.add('show-right'); return; }
       if (ED.pickGuide) { hintOnce('Toque noutra linha guia'); return; } }
     if (hits.length) {
-      const cur = ED.sel && hits.findIndex(h => h.k === ED.sel.k && h.id === ED.sel.id), wasSel = cur != null && cur >= 0, h = wasSel ? hits[cur] : hits[0];
-      const q = f[KEYOF[h.k]].find(z => z.id === h.id), prevSel = ED.sel;
+      const M = msel(), inM = h => M && M.some(q => q.k === h.k && q.id === h.id);
+      if (e.shiftKey || e.ctrlKey || e.metaKey || ED.multi) { const h = hits[0]; ED.drag = { kind: 'toggle', h, cx: e.clientX, cy: e.clientY, ox: ED.ox, oy: ED.oy, touch }; return; }
+      const gi = M ? hits.findIndex(inM) : -1;
+      const cur = ED.sel && hits.findIndex(h => h.k === ED.sel.k && h.id === ED.sel.id), wasSel = gi >= 0 || (cur != null && cur >= 0), h = gi >= 0 ? hits[gi] : wasSel ? hits[cur] : hits[0];
+      const q = f[KEYOF[h.k]].find(z => z.id === h.id), prevSel = ED.sel, prevM = ED.msel;
+      if (gi < 0) ED.msel = null;
       ED.sel = { k: h.k, id: h.id };
-      ED.drag = { kind: 'move', k: h.k, q, x, y, o: JSON.parse(JSON.stringify(q)), cx: e.clientX, cy: e.clientY, started: 0, wasSel, touch, hits, prevSel, ox: ED.ox, oy: ED.oy, fx: fWithout(f, new Set([q.id])) };
-      if (!wasSel) { renderSel(); drawEd(); buzz(); }
+      const grp = gi >= 0 ? selItems(f).map(({ s: s2, q: q2 }) => ({ q: q2, o: JSON.parse(JSON.stringify(q2)) })) : null;
+      ED.drag = { kind: 'move', k: h.k, q, x, y, o: JSON.parse(JSON.stringify(q)), cx: e.clientX, cy: e.clientY, started: 0, wasSel, touch, hits, prevSel, prevM, ox: ED.ox, oy: ED.oy, grp, fx: fWithout(f, new Set(grp ? grp.map(g => g.q.id) : [q.id])) };
+      if (!wasSel || (!grp && prevM)) { renderSel(); drawEd(); buzz(); }
       return;
     }
+    if (!touch) { ED.drag = { kind: 'marq', x0: x, y0: y, x1: x, y1: y, cx: e.clientX, cy: e.clientY, add: e.shiftKey || e.ctrlKey || ED.multi, empty: 1 }; return; }
     ED.drag = { kind: 'pan', cx: e.clientX, cy: e.clientY, ox: ED.ox, oy: ED.oy, empty: 1 };
     if (ED.vsel) { ED.vsel = null; drawEd(); }
   });
@@ -1539,16 +1622,20 @@ function bindEditor() {
     if ((d.kind === 'move' || d.kind === 'handle' || d.kind === 'tap' || d.kind === 'vertex') && !d.started) {
       if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < (d.touch || d.kind === 'tap' ? 10 : 5)) return;
       if (d.kind === 'tap' || (d.kind === 'move' && d.touch && !d.wasSel)) { // no telemóvel, arrastar algo não seleccionado = mover a vista
-        if (d.kind === 'move') { ED.sel = d.prevSel; renderSel(); }
+        if (d.kind === 'move') { ED.sel = d.prevSel; ED.msel = d.prevM || null; renderSel(); }
         ED.drag = { kind: 'pan', cx: d.cx, cy: d.cy, ox: d.ox, oy: d.oy }; return; }
       d.started = 1;
     }
+    if (d.kind === 'toggle') { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) > 10) ED.drag = { kind: 'pan', cx: d.cx, cy: d.cy, ox: d.ox, oy: d.oy }; return; }
+    if (d.kind === 'marq') { d.x1 = x; d.y1 = y; drawSoon(); return; }
     if (d.kind === 'pan') { const { w } = edBox(), k = ED.G / w; ED.ox = d.ox - (e.clientX - d.cx) * k; ED.oy = d.oy - (e.clientY - d.cy) * k; drawEd(); return; }
     if (d.kind === 'move') {
       const q = d.q, o = d.o;
       if (d.k === 'op') snapOp(f, q, x, y, Math.max(1, ED.G / 12));
       else if (d.k === 'wall' || d.k === 'beam' || d.k === 'guide') { const sn = snapAt(d.fx, o.x1 + (x - d.x), o.y1 + (y - d.y)), dx = sn.x - o.x1, dy = sn.y - o.y1; Object.assign(q, { x1: +(o.x1 + dx).toFixed(3), y1: +(o.y1 + dy).toFixed(3), x2: +(o.x2 + dx).toFixed(3), y2: +(o.y2 + dy).toFixed(3) }); d.snap = sn; }
       else { const sn = snapAt(d.fx, o.x + (x - d.x), o.y + (y - d.y)); q.x = sn.x; q.y = sn.y; d.snap = sn; }
+      if (d.grp) { const dx = 'x1' in q ? q.x1 - o.x1 : q.x - o.x, dy = 'x1' in q ? q.y1 - o.y1 : q.y - o.y;
+        d.grp.forEach(g => { if (g.q === q) return; const a = g.o; if ('x1' in a) Object.assign(g.q, { x1: +(a.x1 + dx).toFixed(3), y1: +(a.y1 + dy).toFixed(3), x2: +(a.x2 + dx).toFixed(3), y2: +(a.y2 + dy).toFixed(3) }); else { g.q.x = +(a.x + dx).toFixed(3); g.q.y = +(a.y + dy).toFixed(3); } }); }
       drawEd(); return;
     }
     if (d.kind === 'handle') {
@@ -1572,9 +1659,13 @@ function bindEditor() {
     const d = ED.drag; ED.drag = null; if (!d) return;
     if (d.kind === 'tap') { if (d.corner) applyCorner(ensureF(floor()), d.x, d.y, ED.G / edBox().w * 28); else placeAt(ensureF(floor()), d.x, d.y, true); return; }
     if (d.kind === 'vertex') { if (d.started) { changed(); if (ED.ws) refreshSum(); drawEd(); } return; }
-    if (d.kind === 'pan' && d.empty && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 8) { if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } return; }
+    if (d.kind === 'toggle') { toggleMulti(d.h.k, d.h.id); return; }
+    if (d.kind === 'marq') { const f2 = ensureF(floor()), tiny = Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 6;
+      if (tiny) { if (!d.add && (ED.sel || ED.msel)) { ED.sel = null; ED.msel = null; } renderSel(); drawEd(); return; }
+      const n = marqSelect(f2, d, d.add); if (ED.tool === 'area') setTool('mover'); renderSel(); drawEd(); if (n) { buzz(); toast(n === 1 ? '1 elemento seleccionado' : `${n} elementos seleccionados`); if (ED.ws && n > 1 && innerWidth <= 1000) {} } return; }
+    if (d.kind === 'pan' && d.empty && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 8) { if (ED.sel || ED.msel) { ED.sel = null; ED.msel = null; renderSel(); drawEd(); } return; }
     if (d.kind === 'move' && !d.started) return;
-    if ((d.kind === 'move' || d.kind === 'handle') && d.started) { changed(); renderSel(); if (d.k === 'op') refreshOps(); if (ED.ws) refreshSum(); drawEd(); }
+    if ((d.kind === 'move' || d.kind === 'handle') && d.started) { changed(); renderSel(); if (d.k === 'op' || d.grp) refreshOps(); if (ED.ws) refreshSum(); drawEd(); }
   };
   sv.addEventListener('pointerup', up); sv.addEventListener('pointercancel', up);
   sv.addEventListener('pointerleave', () => { if (ED.hover || (ED.snap && !ED.draw)) { ED.hover = null; ED.snap = null; drawEd(); } });
@@ -1588,7 +1679,7 @@ function refreshOps() { const el = $('opsList'); if (el) el.innerHTML = floor().
 function setTool(k) {
   if (k === 'objecto') { objPicker(); return; }
   if (ED.view !== 'plan' && k !== 'mover') ED.view = 'plan';
-  ED.tool = k; ED.draw = null; ED.vsel = null; ED.calib = []; ED.hover = null; ED.snap = null; if (k !== 'mover') ED.sel = null; renderSel(); drawEd(); buzz();
+  ED.tool = k; ED.draw = null; ED.vsel = null; ED.calib = []; ED.hover = null; ED.snap = null; if (k !== 'mover') { ED.sel = null; ED.msel = null; ED.multi = false; } renderSel(); drawEd(); buzz();
 }
 
 /* ---------- eventos do editor ---------- */
@@ -1623,26 +1714,31 @@ document.addEventListener('click', e => {
     const g = { id: uid(), x1: +(q.x1 + nx).toFixed(3), y1: +(q.y1 + ny).toFixed(3), x2: +(q.x2 + nx).toFixed(3), y2: +(q.y2 + ny).toFixed(3) }; fl.guides.push(g); ED.sel = { k: 'guide', id: g.id }; renderSel(); drawEd(); changed(); buzz(); toast(`Linha guia a ${fmt(D, 2)} m`); return; }
   if (t.closest('[data-dbend]')) { ED.draw = null; drawEd(); return; }
   if (t.closest('[data-seledit]')) { if (ED.ws) $('ws').classList.add('show-right'); else { const sp = $('selPanel'); if (sp) sp.scrollIntoView({ behavior: 'smooth', block: 'center' }); } return; }
-  if (t.closest('[data-selclose]')) { ED.sel = null; renderSel(); drawEd(); return; }
+  if (t.closest('[data-multi]')) { ED.multi = !ED.multi; if (ED.multi && ED.tool !== 'mover') { const k = ED.sel; setTool('mover'); ED.sel = k; } renderSel(); drawEd(); toast(ED.multi ? 'Toque nos elementos para os juntar' : 'Selecção múltipla desligada'); return; }
+  if (t.closest('[data-selclose]')) { ED.msel = null; ED.multi = false; ED.sel = null; renderSel(); drawEd(); return; }
   if (t.closest('[data-delsel]')) { delSel(); return; }
+  if (t.closest('[data-dupsel]') && msel()) { const nw = []; selItems(f).forEach(({ s: s2, q }) => { const c = { ...JSON.parse(JSON.stringify(q)), id: uid() }; if ('x1' in c) { c.x1 += 1; c.x2 += 1; c.y1 += 1; c.y2 += 1; } else { c.x += 1; c.y += 1; } if (s2.k === 'room') c.name = ''; f[KEYOF[s2.k]].push(c); nw.push({ k: s2.k, id: c.id }); });
+    ED.msel = nw; ED.sel = nw[nw.length - 1]; renderSel(); refreshOps(); drawEd(); changed(); toast(`${nw.length} duplicados (+1 m)`); return; }
   if (t.closest('[data-dupsel]') && ED.sel) { const s = ED.sel, key = KEYOF[s.k], q = f[key].find(z => z.id === s.id), c = { ...JSON.parse(JSON.stringify(q)), id: uid() };
     if ('x1' in c) { c.x1 += .5; c.x2 += .5; c.y1 += .5; c.y2 += .5; } else if (s.k === 'room' || s.k === 'slab') { c.x = +(q.x + q.w).toFixed(3); c.name = ''; } else { c.x += (pf(q.w) || pf(q.b) || .5) + .2; }
     f[key].push(c); ED.sel = { k: s.k, id: c.id }; renderSel(); drawEd(); changed(); return; }
   if (t.closest('[data-rot]') && ED.sel) { const o = selObj(); o.rot = ((o.rot || 0) + 90) % 360; renderSel(); drawEd(); changed(); buzz(); return; }
   if (t.closest('[data-flip]') && ED.sel) { const o = selObj(); o.flip = o.flip ? 0 : 1; drawEd(); changed(); buzz(); return; }
-  const wt = t.closest('[data-wtype] button'); if (wt && ED.sel) { const w = selObj(); w.type = wt.dataset.v; renderSel(); drawEd(); changed(); buzz(); return; }
+  const wt = t.closest('[data-wtype] button'); if (wt && ED.sel) { selItems(f).filter(x => x.s.k === 'wall').forEach(({ q }) => { q.type = wt.dataset.v; }); renderSel(); drawEd(); changed(); if (ED.ws) refreshSum(); buzz(); return; }
 });
-function delSel() { if (!ED.sel) return; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; f[key] = f[key].filter(q => q.id !== ED.sel.id); ED.sel = null; renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); toast('Apagado'); }
+function delSel() { if (msel()) { const f = ensureF(floor()), n = ED.msel.length; ED.msel.forEach(s2 => { const key = KEYOF[s2.k]; f[key] = f[key].filter(q => q.id !== s2.id); }); ED.msel = null; ED.sel = null; renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); toast(`${n} apagados`); return; }
+  if (!ED.sel) return; const f = ensureF(floor()), key = KEYOF[ED.sel.k]; f[key] = f[key].filter(q => q.id !== ED.sel.id); ED.sel = null; renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); toast('Apagado'); }
 document.addEventListener('input', e => { if (e.target.id === 'dbCorner') ED.cornerD = pf(e.target.value) || ED.cornerD; });
 document.addEventListener('input', e => {
   const el = e.target; if (!el.closest || !el.closest('#selPanel')) return;
-  const q = selObj(); if (!q) return; const f = floor();
+  const q = selObj(); if (!q) return; const f = ensureF(floor());
   const num = v => pf(v);
   if (el.dataset.rf) q[el.dataset.rf] = ['w', 'l', 'x', 'y'].includes(el.dataset.rf) ? num(el.value) : el.value;
   else if (el.dataset.sf) q[el.dataset.sf] = num(el.value);
   else if (el.dataset.cf) q[el.dataset.cf] = num(el.value);
   else if (el.dataset.bf) q[el.dataset.bf] = num(el.value);
   else if (el.dataset.obf) q[el.dataset.obf] = num(el.value);
+  else if (el.hasAttribute('data-wbl') || el.hasAttribute('data-wh')) { const v = pf(el.value); selItems(f).filter(x => x.s.k === 'wall').forEach(({ q: w }) => { const k = el.hasAttribute('data-wbl') ? 'bl' : 'h'; if (v > 0) w[k] = v; else delete w[k]; }); if (el.hasAttribute('data-wbl')) renderSel(); }
   else if (el.hasAttribute('data-gdist')) { const D = pf(el.value); if (!(D >= 0)) return; applyGDist(D); }
   else if (el.dataset.sof) { q[el.dataset.sof] = el.value; if (el.dataset.sof === 't') { const d = OP_TYPES[q.t]; q.w = d.w; q.h = d.h; snapOp(f, q, q.x, q.y, 1); renderSel(); } refreshOps(); }
   else if (el.hasAttribute('data-wl') || el.hasAttribute('data-wa')) {
@@ -1659,12 +1755,14 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.closest && e.target.closest('#dimBox')) { e.preventDefault(); applyDimEdit(); return; }
   if (e.key === 'Escape' && ED.dimEdit) { closeDimEdit(); return; }
   if (e.key === 'Enter' && e.target.closest && e.target.closest('#drawBox')) { e.preventDefault(); applyDrawBox(); return; }
+  if (e.key === 'Escape' && (ED.msel || ED.multi)) { ED.msel = null; ED.multi = false; ED.sel = null; renderSel(); drawEd(); return; }
+  if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && ED.view === 'plan') { e.preventDefault(); const f = ensureF(floor()); marqSelect(f, { x0: -1e6, y0: -1e6, x1: 1e6, y1: 1e6 }, false); renderSel(); drawEd(); return; }
   if (e.key === 'Escape') { if (ED.vsel) { ED.vsel = null; drawEd(); } else if (ED.draw) { ED.draw = null; drawEd(); } else if (ED.tool !== 'mover') setTool('mover'); else if (ED.sel) { ED.sel = null; renderSel(); drawEd(); } else if (ED.ws) openWS(false); return; }
   if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (!inField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (inField) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && ED.sel) { e.preventDefault(); delSel(); return; }
-  const map = { v: 'mover', w: 'parede', r: 'sala', p: 'pilar', b: 'viga', l: 'laje', d: 'porta', j: 'janela', g: 'portao', k: 'guia', c: 'canto' };
+  const map = { v: 'mover', w: 'parede', r: 'sala', p: 'pilar', b: 'viga', l: 'laje', d: 'porta', j: 'janela', g: 'portao', k: 'guia', c: 'canto', a: 'area' };
   if (map[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { setTool(map[e.key.toLowerCase()]); return; }
   // escrever números enquanto desenha abre o comprimento
   if (ED.draw && /^[0-9.,]$/.test(e.key)) { const i = $('dbLen') || $('dbW'); if (i) { i.focus(); i.value = e.key === ',' ? '.' : e.key; e.preventDefault(); } }
