@@ -42,6 +42,8 @@ img{max-width:100%}
 
 
 
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -140,6 +142,7 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .v3ctl{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;display:flex;gap:3px;padding:4px;border-radius:12px;background:rgba(20,26,24,.9);border:1px solid var(--line2);max-width:calc(100% - 16px);overflow-x:auto}
 .v3ctl button{flex:none;border:0;border-radius:9px;background:transparent;color:var(--ink);font:600 12px var(--body);padding:8px 10px;cursor:pointer}
 .v3ctl button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.ed-selbar:not([hidden]) ~ .v3ctl{top:60px}
 .loupe{position:absolute;z-index:6;width:132px;height:132px;border-radius:50%;overflow:hidden;border:2px solid var(--accent);background:#0C1110;box-shadow:0 10px 36px rgba(0,0,0,.7);pointer-events:none}
 .loupe svg{width:100%;height:100%;display:block}
 .lp-h,.lp-v{position:absolute;background:rgba(255,178,63,.9)}
@@ -149,6 +152,7 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .pargrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pargrid .num{grid-column:1/-1}.pargrid .btn{padding:8px 6px}
 .gp-h .btn{padding:6px 10px}
 .dimbox{z-index:7;top:58px;left:50%;right:auto;transform:translateX(-50%);border-color:var(--accent)}
+.opsets{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}.opsets span{font:700 10px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;min-width:62px}.opsets .chip{padding:6px 9px;font-size:12px}.opsets .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .gpair{border:1px solid var(--line2);border-radius:12px;padding:10px;display:grid;gap:8px;background:rgba(61,220,151,.05)}
 .gp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;font:700 11px var(--mono)}
 .gp-a{color:#3DDC97}.gp-b{color:var(--accent)}
@@ -743,6 +747,8 @@ async function loadImage(file) {
 
 
 
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -781,6 +787,29 @@ function segsOf(f) {
   const out = [], g = floorGeom(f);
   if (g.cnt) wallRuns(g.cnt).forEach(r => out.push({ ...r }));
   (f.walls || []).forEach(w => out.push({ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, int: w.type === 'int', muro: w.type === 'muro', wid: w.id, t: wT(w), h: pf(w.h) || 0, type: w.type }));
+  return out;
+}
+/* uniões das paredes: cantos em esquadria (L) e encosto na face (T), sem sobreposição */
+function wallPolys(segs) {
+  const E = 2e-3, H = Math.hypot;
+  const out = segs.map(sg => { const L = H(sg.x2 - sg.x1, sg.y2 - sg.y1), ux = L ? (sg.x2 - sg.x1) / L : 1, uy = L ? (sg.y2 - sg.y1) / L : 0, nx = -uy, ny = ux, t = (sg.t || wallT(sg.int)) / 2;
+    return { sg, L, ux, uy, nx, ny, t, LA: [sg.x1 + nx * t, sg.y1 + ny * t], LB: [sg.x2 + nx * t, sg.y2 + ny * t], RB: [sg.x2 - nx * t, sg.y2 - ny * t], RA: [sg.x1 - nx * t, sg.y1 - ny * t] }; });
+  const X = (p, d, q, e) => { const den = d[0] * e[1] - d[1] * e[0]; if (Math.abs(den) < 1e-9) return null; const k = ((q[0] - p[0]) * e[1] - (q[1] - p[1]) * e[0]) / den; return [p[0] + d[0] * k, p[1] + d[1] * k]; };
+  out.forEach((w, i) => { if (w.L < 1e-3) return;
+    [[w.sg.x1, w.sg.y1, 1], [w.sg.x2, w.sg.y2, -1]].forEach(([px, py, sgn]) => {
+      const u = [w.ux * sgn, w.uy * sgn], n = [w.nx * sgn, w.ny * sgn], ends = [], Ts = [];
+      out.forEach((o, j) => { if (j === i || o.L < 1e-3) return;
+        if (H(o.sg.x1 - px, o.sg.y1 - py) < E) ends.push({ o, v: [o.ux, o.uy], m: [o.nx, o.ny] });
+        else if (H(o.sg.x2 - px, o.sg.y2 - py) < E) ends.push({ o, v: [-o.ux, -o.uy], m: [-o.nx, -o.ny] });
+        else { const dx = px - o.sg.x1, dy = py - o.sg.y1, al = dx * o.ux + dy * o.uy, of = dx * o.nx + dy * o.ny; if (al > E && al < o.L - E && Math.abs(of) < E) Ts.push(o); } });
+      let Lp = null, Rp = null; const Pl = [px + n[0] * w.t, py + n[1] * w.t], Pr = [px - n[0] * w.t, py - n[1] * w.t];
+      if (ends.length === 1 && !Ts.length) { const { o, v, m } = ends[0];
+        if (Math.abs(u[0] * v[1] - u[1] * v[0]) > 1e-3) { Lp = X(Pl, u, [px - m[0] * o.t, py - m[1] * o.t], v); Rp = X(Pr, u, [px + m[0] * o.t, py + m[1] * o.t], v); } }
+      else if (Ts.length === 1 && !ends.length) { const o = Ts[0], far = sgn === 1 ? [w.sg.x2, w.sg.y2] : [w.sg.x1, w.sg.y1], sd = Math.sign((far[0] - o.sg.x1) * o.nx + (far[1] - o.sg.y1) * o.ny) || 1, fp = [o.sg.x1 + o.nx * o.t * sd, o.sg.y1 + o.ny * o.t * sd], fd = [o.ux, o.uy];
+        Lp = X(Pl, u, fp, fd); Rp = X(Pr, u, fp, fd); }
+      const lim = Math.max(w.t, .05) * 8; if (Lp && H(Lp[0] - px, Lp[1] - py) > lim) Lp = null; if (Rp && H(Rp[0] - px, Rp[1] - py) > lim) Rp = null;
+      if (sgn === 1) { if (Lp) w.LA = Lp; if (Rp) w.RA = Rp; } else { if (Lp) w.RB = Lp; if (Rp) w.LB = Rp; }
+    }); });
   return out;
 }
 function nearestSeg(f, x, y, tol, withBeams) {
@@ -1044,6 +1073,11 @@ function groupPanelHTML(f) {
     ${walls.length ? `<div class="ws-h">Paredes seleccionadas (${walls.length})</div>${wallTypeSeg(t0)}${wallSizeHTML(walls)}` : ''}
     <div class="row"><button class="btn ghost" data-dupsel>Duplicar todos</button><button class="btn danger" data-delsel>Apagar todos</button></div></div>`;
 }
+function opPresets(o) {
+  const k = (OP_TYPES[o.t] || {}).k, W = k === 'janela' ? [.6, 1, 1.2, 1.5, 2] : k === 'portao' ? [2.5, 3, 3.5, 4] : [.7, .8, .9, 1, 1.2, 1.6], Hh = k === 'janela' ? [.6, 1, 1.2, 1.5] : k === 'portao' ? [2, 2.2, 2.5] : [2, 2.1, 2.2, 2.4];
+  const ch = (a, v, cur) => `<button class="chip" data-opset="${a}:${v}" aria-pressed="${Math.abs(pf(cur) - v) < 1e-3}">${fmt(v, 2)}</button>`;
+  return `<div class="opsets"><span>Largura</span>${W.map(v => ch('w', v, o.w)).join('')}</div><div class="opsets"><span>Altura</span>${Hh.map(v => ch('h', v, o.h)).join('')}</div>`;
+}
 function selPanelHTML() {
   const f = ensureF(floor()), s = ED.sel;
   if (msel()) return groupPanelHTML(f);
@@ -1073,13 +1107,14 @@ function selPanelHTML() {
     return `<div class="selpanel">${head((OP_TYPES[o.t] || {}).n || 'Abertura')}
       <div class="fields">${selF('Tipo', o.t, Object.fromEntries(Object.entries(OP_TYPES).map(([k, v]) => [k, v.n])), 'data-sof="t"')}<div class="field"><span>Parede</span><div class="num"><input value="${opWallType(f, o) === 'int' ? 'Interior' : 'Exterior'}" disabled></div></div></div>
       <div class="fields f3">${numF('Largura', o.w, 'm', 'data-sof="w" step="0.05"')}${numF('Altura', o.h, 'm', 'data-sof="h" step="0.05"')}${isWin ? numF('Peitoril', o.sill ?? .9, 'm', 'data-sof="sill" step="0.05"') : '<div></div>'}</div>
+      ${opPresets(o)}<p class="hint">Também pode arrastar as bolinhas nas pontas da ${isWin ? 'janela' : 'porta'} na planta para mudar a largura.</p>
       <div class="row">${isWin ? '' : '<button class="btn ghost" data-flip>Inverter abertura</button>'}<button class="btn danger" data-delsel>Apagar</button></div></div>`; }
   if (s.k === 'obj') { const o = f.objs.find(q => q.id === s.id); if (!o) return '';
     return `<div class="selpanel">${head(OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto')}<div class="fields f3">${numF('Largura', o.w, 'm', 'data-obf="w" step="0.05"')}${numF('Profundidade', o.d, 'm', 'data-obf="d" step="0.05"')}<div class="field"><span>Rotação</span><button class="btn ghost" data-rot>↻ ${fmt(o.rot || 0, 0)}°</button></div></div>${tail()}</div>`; }
   return '';
 }
 function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor().objs || []).find(q => q.id === s.id); return o && OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto'; } if (s.k === 'op') { const o = floor().ops.find(q => q.id === s.id); return o && OP_TYPES[o.t] ? OP_TYPES[o.t].n : 'Abertura'; } return { room: 'Compartimento', wall: 'Parede', beam: 'Viga', col: 'Pilar', slab: 'Laje', guide: 'Linha guia' }[s.k] || ''; }
-function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.multi && !msel() && !ED.pickGuide) { b.hidden = ED.view !== 'plan'; b.innerHTML = `<b style="max-width:none">Toque para juntar à selecção</b><button data-multi aria-pressed="true">Feito</button>`; if (s && ED.view === 'plan') b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="true">＋ Feito</button><button class="dz" data-delsel>🗑</button><button data-selclose>✕</button>`; return; } if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || ED.view !== 'plan' || !!ED.draw;
+function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.view === '3d' && s && !msel()) { b.hidden = false; b.innerHTML = `<b>${esc(selName(s))}</b><button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; return; } if (ED.multi && !msel() && !ED.pickGuide) { b.hidden = ED.view !== 'plan'; b.innerHTML = `<b style="max-width:none">Toque para juntar à selecção</b><button data-multi aria-pressed="true">Feito</button>`; if (s && ED.view === 'plan') b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="true">＋ Feito</button><button class="dz" data-delsel>🗑</button><button data-selclose>✕</button>`; return; } if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || (ED.view !== 'plan' && ED.view !== '3d') || !!ED.draw;
   if (msel() && ED.view === 'plan') b.hidden = false; if (b.hidden) { b.innerHTML = ''; return; }
   if (msel()) { b.innerHTML = `<b>${ED.msel.length} itens</b><button data-multi aria-pressed="${!!ED.multi}" title="Juntar mais por toque">${ED.multi ? 'Feito' : '＋'}</button><button data-dupsel aria-label="Duplicar">⧉</button><button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; return; }
   b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="${!!ED.multi}" title="Seleccionar vários" aria-label="Seleccionar vários">＋</button>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
@@ -1170,8 +1205,8 @@ function drawEd() {
   f.rooms.forEach(r => { s += `<rect data-room="${r.id}" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.l}" fill="${TYPE_FILL[r.type] || TYPE_FILL.outro}"/>`; });
   (f.objs || []).forEach(o => { s += `<g data-obj="${o.id}" transform="translate(${o.x} ${o.y}) rotate(${o.rot || 0})">${objSym(o.k, pf(o.w), pf(o.d))}${isSel('obj', o.id) ? `<rect x="${-pf(o.w) / 2 - .05}" y="${-pf(o.d) / 2 - .05}" width="${pf(o.w) + .1}" height="${pf(o.d) + .1}" fill="none" stroke="#5EC8E5" stroke-width="2" stroke-dasharray="5 3" vector-effect="non-scaling-stroke"/>` : ''}</g>`; });
   const segs = segsOf(f);
-  segs.forEach(l => { const sel = l.wid && isSel('wall', l.wid);
-    s += `<line ${l.wid ? `data-wall="${l.wid}"` : ''} x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="${sel ? '#5EC8E5' : l.muro ? WT_COL.muro : l.int ? '#A9B0AC' : '#E6E1D3'}" stroke-width="${l.t || wallT(l.int)}" stroke-linecap="square" ${l.wid ? '' : 'pointer-events="none"'}/>`; });
+  wallPolys(segs).forEach(wp => { const l = wp.sg, sel = l.wid && isSel('wall', l.wid), c = [wp.LA, wp.LB, wp.RB, wp.RA].map(q => q[0].toFixed(3) + ',' + q[1].toFixed(3)).join(' '), col = sel ? '#5EC8E5' : l.muro ? WT_COL.muro : l.int ? '#A9B0AC' : '#E6E1D3';
+    s += `<polygon points="${c}" fill="${col}" stroke="${col}" stroke-width=".6" vector-effect="non-scaling-stroke" stroke-linejoin="miter" pointer-events="none"/>`; });
   (f.beams || []).forEach(b => { s += `<line data-beam="${b.id}" x1="${b.x1}" y1="${b.y1}" x2="${b.x2}" y2="${b.y2}" stroke="${isSel('beam', b.id) ? '#5EC8E5' : '#C98A4B'}" stroke-width="${pf(b.b)}" stroke-dasharray="${pf(b.b) * 2} ${pf(b.b)}" opacity=".85"/>`; });
   (f.cols || []).forEach(c => { const b = pf(c.b); s += `<g data-col="${c.id}"><rect x="${c.x - b / 2}" y="${c.y - b / 2}" width="${b}" height="${b}" fill="#5B6561" stroke="${isSel('col', c.id) ? '#5EC8E5' : '#E6E1D3'}" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M${c.x - b / 2} ${c.y - b / 2}l${b} ${b}M${c.x + b / 2} ${c.y - b / 2}l${-b} ${b}" stroke="#E6E1D3" stroke-width="1" vector-effect="non-scaling-stroke"/></g>`; });
   f.ops.filter(o => o.x != null).forEach(o => { s += opSym(f, o, isSel('op', o.id)); });
@@ -1190,7 +1225,8 @@ function drawEd() {
   const H = (id, x, y) => `<circle data-handle="${id}" cx="${x}" cy="${y}" r="${G / 34}" fill="#5EC8E5" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
   if (ED.sel && !msel()) { const q = selObj();
     if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>` + H('rect', q.x + q.w, q.y + q.l);
-    if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam' || ED.sel.k === 'guide')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2); }
+    if (q && (ED.sel.k === 'wall' || ED.sel.k === 'beam' || ED.sel.k === 'guide')) s += H('p1', q.x1, q.y1) + H('p2', q.x2, q.y2);
+    if (q && ED.sel.k === 'op' && q.x != null) { const a = q.ang || 0, w2 = pf(q.w) / 2; s += H('o1', q.x - Math.cos(a) * w2, q.y - Math.sin(a) * w2) + H('o2', q.x + Math.cos(a) * w2, q.y + Math.sin(a) * w2); } }
   if (ED.sel && !msel() && !ED.gpair && !ED.draw) s += dimsSVG(f, fs); else ED.dims = null;
   if (ED.gpair) { const A = (f.guides || []).find(q => q.id === ED.gpair.a), Bq = (f.guides || []).find(q => q.id === ED.gpair.b);
     if (A && Bq) { const L = Math.hypot(A.x2 - A.x1, A.y2 - A.y1) || 1, ux = (A.x2 - A.x1) / L, uy = (A.y2 - A.y1) / L, E = (G + GH) * 3, c0x = ED.ox + G / 2, c0y = ED.oy + GH / 2, t0 = (c0x - A.x1) * ux + (c0y - A.y1) * uy, bx = A.x1 + ux * t0, by = A.y1 + uy * t0;
@@ -1367,25 +1403,26 @@ function buildFaces(forElev) {
   p.floors.forEach((f, fi) => {
     ensureF(f); if (f.mode === 'lista') { z0 += pf(f.h); return; }
     const H0 = pf(f.h), ex = { alpha: !forElev && fi > FL ? .15 : 1, fi };
-    f.rooms.forEach(r => quad([[r.x, r.y, z0 + .01], [r.x + r.w, r.y, z0 + .01], [r.x + r.w, r.y + r.l, z0 + .01], [r.x, r.y + r.l, z0 + .01]], [0, 0, 1], '#3a403d', { ...ex, floor: 1 }));
+    f.rooms.forEach(r => quad([[r.x, r.y, z0 + .01], [r.x + r.w, r.y, z0 + .01], [r.x + r.w, r.y + r.l, z0 + .01], [r.x, r.y + r.l, z0 + .01]], [0, 0, 1], '#3a403d', { ...ex, floor: 1, src: { k: 'room', id: r.id, fi } }));
+    const wps = wallPolys(segsOf(f));
     segsOf(f).forEach((sg, si) => {
-      const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1); if (L < 1e-3) return; const hk = fi + ':' + si;
+      const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1); if (L < 1e-3) return; const hk = fi + ':' + si, wp = wps[si];
       const ux = (sg.x2 - sg.x1) / L, uy = (sg.y2 - sg.y1) / L, nx = -uy, ny = ux, t = (sg.t || wallT(sg.int)) / 2, Hw = sg.h || (sg.muro ? muroDef('muroH') : H0);
-      box([[sg.x1 + nx * t, sg.y1 + ny * t], [sg.x2 + nx * t, sg.y2 + ny * t], [sg.x2 - nx * t, sg.y2 - ny * t], [sg.x1 - nx * t, sg.y1 - ny * t]], z0, z0 + Hw, sg.muro ? '#CDB48C' : sg.int ? '#AEB5B1' : '#E6E1D3', sg.muro ? '#D8C4A0' : '#C9CFCB', { ...ex, wall: 1, hk });
+      box([wp.LA, wp.LB, wp.RB, wp.RA], z0, z0 + Hw, sg.muro ? '#CDB48C' : sg.int ? '#AEB5B1' : '#E6E1D3', sg.muro ? '#D8C4A0' : '#C9CFCB', { ...ex, wall: 1, hk, src: sg.wid ? { k: 'wall', id: sg.wid, fi } : null });
       f.ops.filter(op => op.x != null).forEach(op => {
         const dx = op.x - sg.x1, dy = op.y - sg.y1, along = dx * ux + dy * uy, off = Math.abs(dx * nx + dy * ny);
         if (off > .05 || along < -.01 || along > L + .01) return;
         const k = (OP_TYPES[op.t] || {}).k, s0 = along - pf(op.w) / 2, s1 = along + pf(op.w) / 2, zb = z0 + (k === 'janela' ? pf(op.sill ?? .9) : 0), zt = Math.min(z0 + H0 - .05, zb + pf(op.h));
         [1, -1].forEach(sgn => { const o2 = sgn * (t + .004), P2 = (sv2, z) => [sg.x1 + ux * sv2 + nx * o2, sg.y1 + uy * sv2 + ny * o2, z];
-          quad([P2(s0, zb), P2(s1, zb), P2(s1, zt), P2(s0, zt)], [nx * sgn, ny * sgn, 0], k === 'janela' ? '#2A6C80' : k === 'portao' ? '#5a4632' : '#7a5433', { ...ex, decal: 1, stroke: '#FFB23F', kind: k, hk: hk + ':' + sgn }); });
+          quad([P2(s0, zb), P2(s1, zb), P2(s1, zt), P2(s0, zt)], [nx * sgn, ny * sgn, 0], k === 'janela' ? '#2A6C80' : k === 'portao' ? '#5a4632' : '#7a5433', { ...ex, decal: 1, stroke: '#FFB23F', kind: k, hk: hk + ':' + sgn, src: { k: 'op', id: op.id, fi } }); });
       });
     });
-    (f.cols || []).forEach(c => { const b = pf(c.b) / 2; box([[c.x - b, c.y - b], [c.x + b, c.y - b], [c.x + b, c.y + b], [c.x - b, c.y + b]], z0, z0 + H0, '#8E9692', '#A3AAA6', ex); });
+    (f.cols || []).forEach(c => { const b = pf(c.b) / 2; box([[c.x - b, c.y - b], [c.x + b, c.y - b], [c.x + b, c.y + b], [c.x - b, c.y + b]], z0, z0 + H0, '#8E9692', '#A3AAA6', { ...ex, src: { k: 'col', id: c.id, fi } }); });
     (f.beams || []).forEach(bm => { const L = Math.hypot(bm.x2 - bm.x1, bm.y2 - bm.y1); if (L < 1e-3) return; const ux = (bm.x2 - bm.x1) / L, uy = (bm.y2 - bm.y1) / L, nx = -uy, ny = ux, t = pf(bm.b) / 2;
-      box([[bm.x1 + nx * t, bm.y1 + ny * t], [bm.x2 + nx * t, bm.y2 + ny * t], [bm.x2 - nx * t, bm.y2 - ny * t], [bm.x1 - nx * t, bm.y1 - ny * t]], z0 + H0 - pf(bm.h), z0 + H0 + .005, '#9C7A55', '#B08B62', ex); });
-    (f.slabs || []).forEach(r => box([[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.l], [r.x, r.y + r.l]], z0 + H0, z0 + H0 + pf(r.e), '#98A09C', '#B9C0BC', { ...ex, alpha: forElev ? 1 : (fi >= FL ? .55 : 1) }));
+      box([[bm.x1 + nx * t, bm.y1 + ny * t], [bm.x2 + nx * t, bm.y2 + ny * t], [bm.x2 - nx * t, bm.y2 - ny * t], [bm.x1 - nx * t, bm.y1 - ny * t]], z0 + H0 - pf(bm.h), z0 + H0 + .005, '#9C7A55', '#B08B62', { ...ex, src: { k: 'beam', id: bm.id, fi } }); });
+    (f.slabs || []).forEach(r => box([[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.l], [r.x, r.y + r.l]], z0 + H0, z0 + H0 + pf(r.e), '#98A09C', '#B9C0BC', { ...ex, alpha: forElev ? 1 : (fi >= FL ? .55 : 1), src: { k: 'slab', id: r.id, fi } }));
     (f.objs || []).forEach(ob => { const L0 = OBJ_LIB[ob.k] || { h: .5 }, a = (ob.rot || 0) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), hw = pf(ob.w) / 2, hd = pf(ob.d) / 2;
-      box([[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([x, y]) => [ob.x + x * ca - y * sa, ob.y + x * sa + y * ca]), z0, z0 + L0.h, '#6F868D', '#8FA8B0', ex); });
+      box([[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([x, y]) => [ob.x + x * ca - y * sa, ob.y + x * sa + y * ca]), z0, z0 + L0.h, '#6F868D', '#8FA8B0', { ...ex, src: { k: 'obj', id: ob.id, fi } }); });
     z0 += H0 + ((f.slabs || []).length ? Math.max(...f.slabs.map(r => pf(r.e))) : (fi < p.floors.length - 1 ? pf(p.params.lajeE) : 0));
   });
   return faces;
@@ -1406,6 +1443,7 @@ function subdivFaces(faces) {
   });
   return out;
 }
+const mixHex = (a, b, k) => { const A = parseInt(a.slice(1), 16), B = parseInt(b.slice(1), 16), c = (s2) => Math.round(((A >> s2) & 255) * (1 - k) + ((B >> s2) & 255) * k); return '#' + [16, 8, 0].map(s2 => c(s2).toString(16).padStart(2, '0')).join(''); };
 const shade = (hex, k) => { const n = parseInt(hex.slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255, m = v => Math.round(v * (1 - k)); return `rgb(${m(r)},${m(g)},${m(b)})`; };
 function draw3D() {
   const sv = $('ed'), { w: W, h: H } = edBox(), o = ED.orb;
@@ -1442,9 +1480,9 @@ function draw3D() {
   vf.forEach(v => { if (!v.fc.decal || !hostD[v.fc.hk]) return; const c = cen(v.fc.pts), r = Math.hypot(v.fc.pts[0][0] - v.fc.pts[1][0], v.fc.pts[0][1] - v.fc.pts[1][1]) / 2 + .7;
     hostD[v.fc.hk].forEach(h => { if (Math.hypot(h.c[0] - c[0], h.c[1] - c[1]) < r) v.d = Math.max(v.d, h.d + 1e-4); }); });
   vf.sort((a, b) => a.d - b.d);
-  vf.forEach(({ fc, pr }) => { const pts = pr.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' '), sh = fc.n[2] > .5 ? 0 : Math.max(0, .45 - (fc.n[0] * Lt[0] + fc.n[1] * Lt[1]) * .45), col = fc.fill[0] === '#' && fc.fill.length === 7 ? shade(fc.fill, sh) : fc.fill;
+  vf.forEach(({ fc, pr }) => { const pts = pr.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' '), sh = fc.n[2] > .5 ? 0 : Math.max(0, .45 - (fc.n[0] * Lt[0] + fc.n[1] * Lt[1]) * .45), sel3 = fc.src && fc.src.fi === FL && isSel(fc.src.k, fc.src.id), col = fc.fill[0] === '#' && fc.fill.length === 7 ? shade(sel3 ? mixHex(fc.fill, '#5EC8E5', .55) : fc.fill, sh) : fc.fill;
     let eg = ''; if (fc.eg) for (let i = 0; i < pr.length; i++) if (fc.eg[i]) { const a2 = pr[i], b2 = pr[(i + 1) % pr.length]; eg += `M${a2[0].toFixed(1)},${a2[1].toFixed(1)}L${b2[0].toFixed(1)},${b2[1].toFixed(1)}`; }
-    s += `<g${fc.alpha < 1 ? ` opacity="${fc.alpha}"` : ''}><polygon points="${pts}" fill="${col}" stroke="${fc.stroke || col}" stroke-width="${fc.stroke ? 1 : .7}" stroke-linejoin="round"/>${eg && !fc.stroke ? `<path d="${eg}" stroke="rgba(20,25,23,.45)" stroke-width=".8" fill="none"/>` : ''}</g>`; });
+    s += `<g${fc.alpha < 1 ? ` opacity="${fc.alpha}"` : ''}${fc.src ? ` data-s3="${fc.src.k}:${fc.src.id}:${fc.src.fi}"` : ''}><polygon points="${pts}" fill="${col}" stroke="${fc.stroke || col}" stroke-width="${fc.stroke ? 1 : .7}" stroke-linejoin="round"/>${eg && !fc.stroke ? `<path d="${eg}" stroke="${sel3 ? '#1E8FB0' : 'rgba(20,25,23,.45)'}" stroke-width="${sel3 ? 1.6 : .8}" fill="none"/>` : ''}</g>`; });
   sv.innerHTML = s;
   const stt = $('edStatus'); if (stt) stt.textContent = `3D ${o.persp ? 'perspectiva' : 'axonometria'} · arraste = girar · 2 dedos/roda = ${o.persp ? 'aproximar' : 'zoom'}`;
 }
@@ -1496,7 +1534,7 @@ function hitAll(f, x, y, tol) {
 }
 function handleAt(x, y, tol) {
   const q = selObj(); if (!q) return null; const k = ED.sel.k;
-  const hs = k === 'wall' || k === 'beam' ? [['p1', q.x1, q.y1], ['p2', q.x2, q.y2]] : k === 'room' || k === 'slab' ? [['rect', q.x + q.w, q.y + q.l]] : [];
+  const oa = q.ang || 0, ow = pf(q.w) / 2, hs = k === 'wall' || k === 'beam' ? [['p1', q.x1, q.y1], ['p2', q.x2, q.y2]] : k === 'room' || k === 'slab' ? [['rect', q.x + q.w, q.y + q.l]] : k === 'op' && q.x != null ? [['o1', q.x - Math.cos(oa) * ow, q.y - Math.sin(oa) * ow], ['o2', q.x + Math.cos(oa) * ow, q.y + Math.sin(oa) * ow]] : [];
   let best = null; hs.forEach(([id, hx, hy]) => { const d = Math.hypot(hx - x, hy - y); if (d <= tol && (!best || d < best.d)) best = { id, d }; });
   return best && best.id;
 }
@@ -1557,6 +1595,12 @@ function marqSelect(f, d, add) {
   return out.length;
 }
 function selItems(f) { const L = msel() || (ED.sel ? [ED.sel] : []); return L.map(s => ({ s, q: (f[KEYOF[s.k]] || []).find(z => z.id === s.id) })).filter(x => x.q); }
+function pick3D(cx, cy) {
+  const el = document.elementFromPoint(cx, cy), g = el && el.closest && el.closest('[data-s3]');
+  if (!g) { if (ED.sel || ED.msel) { ED.sel = null; ED.msel = null; renderSel(); drawEd(); } return; }
+  const [k, id, fi] = g.dataset.s3.split(':'); if (+fi !== FL) { FL = +fi; render(); }
+  ED.msel = null; ED.sel = { k, id }; renderSel(); drawEd(); buzz(); if (ED.ws && innerWidth <= 1000) $('ws').classList.add('show-right');
+}
 let _hintT = 0; const hintOnce = m => { if (Date.now() - _hintT > 2500) { _hintT = Date.now(); toast(m); } };
 function bindEditor() {
   const sv = $('ed'); if (!sv || sv._b) return; sv._b = 1;
@@ -1575,7 +1619,7 @@ function bindEditor() {
     const touch = e.pointerType !== 'mouse';
     ED.touch = touch;
     ED.lp = touch && ED.view === 'plan' ? { cx: e.clientX, cy: e.clientY } : null;
-    if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY }; return; }
+    if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY, sx: e.clientX, sy: e.clientY }; return; }
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
     const dl = ED.tool === 'mover' && e.target.closest && e.target.closest('[data-dim]'); if (dl && ED.sel && !ED.draw) { openDimEdit(dl.dataset.dim); return; }
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
@@ -1602,7 +1646,7 @@ function bindEditor() {
     }
     // seleccionar / mover
     const hd = ED.sel && !msel() && handleAt(x, y, tol * 1.2);
-    if (hd) { const q = selObj(), refs = hd === 'rect' || ED.sel.k === 'guide' ? [] : refsAt(f, q['x' + hd[1]], q['y' + hd[1]]).filter(r => r.w !== q);
+    if (hd) { const q = selObj(), refs = hd === 'rect' || hd[0] === 'o' || ED.sel.k === 'guide' ? [] : refsAt(f, q['x' + hd[1]], q['y' + hd[1]]).filter(r => r.w !== q);
       ED.drag = { kind: 'handle', which: hd, cx: e.clientX, cy: e.clientY, started: 0, touch, refs, fx: fWithout(f, new Set([q.id, ...refs.map(r => r.w.id)])) }; return; }
     const hits = hitAll(f, x, y, tol);
     if ((ED.pickGuide || e.shiftKey) && ED.sel && ED.sel.k === 'guide') { const hg = hits.find(h => h.k === 'guide' && h.id !== ED.sel.id);
@@ -1662,6 +1706,10 @@ function bindEditor() {
     }
     if (d.kind === 'handle') {
       const q = selObj(); if (!q) return;
+      if (d.which === 'o1' || d.which === 'o2') { const a = q.ang || 0, ux = Math.cos(a), uy = Math.sin(a), sg = d.which === 'o2' ? 1 : -1;
+        if (!d.fix) d.fix = [q.x - sg * ux * pf(q.w) / 2, q.y - sg * uy * pf(q.w) / 2];
+        const along = ((x - d.fix[0]) * ux + (y - d.fix[1]) * uy) * sg, w = Math.max(.4, Math.round(along / .05) * .05);
+        q.w = +w.toFixed(2); q.x = +(d.fix[0] + sg * ux * w / 2).toFixed(3); q.y = +(d.fix[1] + sg * uy * w / 2).toFixed(3); drawEd(); return; }
       if (d.which === 'rect') { const sn = snapAt(d.fx, x, y); q.w = Math.max(.3, +(sn.x - q.x).toFixed(3)); q.l = Math.max(.3, +(sn.y - q.y).toFixed(3)); d.snap = sn; }
       else { const i = d.which === 'p1' ? 1 : 2, j = 3 - i, sn = snapAt(d.fx, x, y, [q['x' + j], q['y' + j]]); q['x' + i] = sn.x; q['y' + i] = sn.y; d.snap = sn; (d.refs || []).forEach(r => { r.w['x' + r.e] = sn.x; r.w['y' + r.e] = sn.y; }); }
       drawEd();
@@ -1679,6 +1727,7 @@ function bindEditor() {
         else if (vx) { ED.draw = null; ED.snap = null; ED.vsel = vx; ED.sel = null; renderSel(); drawEd(); buzz(); hintOnce('Vértice seleccionado — arraste-o para o mover'); }
         else { ED.draw = null; ED.snap = null; if (ED.vsel) ED.vsel = null; drawEd(); hintOnce(ED.tool === 'sala' || ED.tool === 'laje' ? 'Arraste o dedo de um canto ao canto oposto' : 'Arraste o dedo do início ao fim · toque num vértice para o mover'); } } }
     const d = ED.drag; ED.drag = null; if (!d) return;
+    if (d.kind === 'orbit' && ED.view === '3d' && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 8) { pick3D(e.clientX, e.clientY); return; }
     if (d.kind === 'tap') { if (d.corner) applyCorner(ensureF(floor()), d.x, d.y, ED.G / edBox().w * 28); else placeAt(ensureF(floor()), d.x, d.y, true); return; }
     if (d.kind === 'vertex') { if (d.started) { changed(); if (ED.ws) refreshSum(); drawEd(); } return; }
     if (d.kind === 'toggle') { toggleMulti(d.h.k, d.h.id); return; }
@@ -1732,6 +1781,7 @@ document.addEventListener('click', e => {
   if (t.closest('[data-gswap]') && ED.gpair) { ED.gpair = { a: ED.gpair.b, b: ED.gpair.a }; ED.sel = { k: 'guide', id: ED.gpair.b }; renderSel(); drawEd(); buzz(); return; }
   if (t.closest('[data-gapply]') && ED.gpair) { const i = document.querySelector('[data-gdist]'); applyGDist(pf(i && i.value)); drawEd(); changed(); toast('Distância aplicada'); return; }
   if (t.closest('[data-gpend]')) { ED.gpair = null; ED.pickGuide = false; renderSel(); drawEd(); return; }
+  const ops2 = t.closest('[data-opset]'); if (ops2 && ED.sel && ED.sel.k === 'op') { const o = selObj(), [a, v] = ops2.dataset.opset.split(':'); o[a] = +v; if (a === 'w') snapOp(f, o, o.x, o.y, 1); renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); buzz(); return; }
   const gset = t.closest('[data-gset]'); if (gset && ED.sel) { const q = selObj(), a = +gset.dataset.gset * Math.PI / 180, L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 5; q.x2 = +(q.x1 + Math.cos(a) * L).toFixed(3); q.y2 = +(q.y1 + Math.sin(a) * L).toFixed(3); renderSel(); drawEd(); changed(); return; }
   const gp = t.closest('[data-gpar]'); if (gp && ED.sel) { const q = selObj(), D = pf($('gparD') && $('gparD').value); if (!(D > 0)) { toast('Escreva a distância'); return; } ED.gparD = D;
     const L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 1, sg = +gp.dataset.gpar, nx = -(q.y2 - q.y1) / L * D * sg, ny = (q.x2 - q.x1) / L * D * sg, fl = ensureF(floor());
