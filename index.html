@@ -39,6 +39,9 @@ img{max-width:100%}
 
 
 
+
+
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -134,6 +137,9 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .ed-selbar button{flex:none;min-width:38px;height:40px;border:0;border-radius:10px;background:var(--surface2);color:var(--ink);font:600 13px var(--body);padding:0 9px;cursor:pointer}
 .ed-selbar button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .ed-selbar button.dz{background:rgba(255,138,122,.16);color:var(--bad)}
+.v3ctl{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;display:flex;gap:3px;padding:4px;border-radius:12px;background:rgba(20,26,24,.9);border:1px solid var(--line2);max-width:calc(100% - 16px);overflow-x:auto}
+.v3ctl button{flex:none;border:0;border-radius:9px;background:transparent;color:var(--ink);font:600 12px var(--body);padding:8px 10px;cursor:pointer}
+.v3ctl button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .loupe{position:absolute;z-index:6;width:132px;height:132px;border-radius:50%;overflow:hidden;border:2px solid var(--accent);background:#0C1110;box-shadow:0 10px 36px rgba(0,0,0,.7);pointer-events:none}
 .loupe svg{width:100%;height:100%;display:block}
 .lp-h,.lp-v{position:absolute;background:rgba(255,178,63,.9)}
@@ -734,6 +740,9 @@ async function loadImage(file) {
 
 
 
+
+
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -757,7 +766,7 @@ const TOOL_ICON = {
 const KEYOF = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs', guide: 'guides' };
 const PLACE_OPS = { porta: 'porta_int', janela: 'janela', portao: 'portao' };
 const ED = { tool: 'mover', sel: null, vsel: null, cornerMode: 'curva', cornerD: 1, drag: null, draw: null, ox: -1, oy: -1, G: 20, calib: [], view: 'plan', place: null, snap: null, hover: null, ws: false, wallType: 'ext',
-  orb: { yaw: 35, pitch: 32, zoom: 1, px: 0, py: 0 } };
+  orb: { yaw: 35, pitch: 32, zoom: 1, px: 0, py: 0, persp: store.get('oc-persp', 1) } };
 const floor = () => P().floors[FL] || P().floors[0];
 const wallT = int => pf(P().params[int ? 'blocoInt' : 'blocoExt']) / 100 + .03;
 const muroDef = k => { const X = P().params; return pf(X[k]) || PARAMS[k]; };
@@ -948,6 +957,7 @@ function canvasHTML() {
     <div class="ed-zoom"><button class="iconbtn" data-zoom="in" aria-label="Aproximar">+</button><button class="iconbtn" data-zoom="out" aria-label="Afastar">−</button><button class="iconbtn" data-fit aria-label="Ajustar" title="Ajustar">⤢</button></div>
     <div class="ed-status" id="edStatus"></div>
     <div class="ed-selbar" id="edSelBar" hidden></div>
+    <div class="v3ctl" id="v3ctl" hidden><button data-proj="1">Perspectiva</button><button data-proj="0">Axonometria</button><button data-v3="iso" title="Isométrica">Iso</button><button data-v3="top" title="Vista de cima">Cima</button></div>
     <div class="loupe" id="loupe" hidden><svg id="loupeSv" preserveAspectRatio="xMidYMid slice"><use href="#edAll"/></svg><i class="lp-h"></i><i class="lp-v"></i><span id="loupeLbl"></span></div>
     <div class="favbar" id="favBar">${favBarInner()}</div>
     <div class="drawbox" id="drawBox" hidden></div>
@@ -1138,6 +1148,7 @@ const isSel = (k, id) => (ED.sel && ED.sel.k === k && ED.sel.id === id) || !!(ED
 function drawEd() {
   const sv = $('ed'); if (!sv) return;
   renderSelBar(); drawEdAria();
+  const v3 = $('v3ctl'); if (v3) { v3.hidden = ED.view !== '3d'; v3.querySelectorAll('[data-proj]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.proj === (ED.orb.persp ? 1 : 0)))); }
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === ED.view));
   document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === ED.tool || (b.dataset.tool === 'objecto' && ED.tool === 'place')));
   document.querySelectorAll('[data-lib]').forEach(b => b.setAttribute('aria-pressed', ED.tool === 'place' && ED.place === b.dataset.lib));
@@ -1350,23 +1361,23 @@ function buildFaces(forElev) {
     for (let i = 0; i < 4; i++) { const j = (i + 1) % 4, ex = c[j][0] - c[i][0], ey = c[j][1] - c[i][1], ln = Math.hypot(ex, ey) || 1;
       let nx = ey / ln, ny = -ex / ln; const mx = (c[i][0] + c[j][0]) / 2, my = (c[i][1] + c[j][1]) / 2, cx = (c[0][0] + c[2][0]) / 2, cy = (c[0][1] + c[2][1]) / 2;
       if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }
-      quad([[c[i][0], c[i][1], z0], [c[j][0], c[j][1], z0], [c[j][0], c[j][1], z1], [c[i][0], c[i][1], z1]], [nx, ny, 0], col, extra); }
+      quad([[c[i][0], c[i][1], z0], [c[j][0], c[j][1], z0], [c[j][0], c[j][1], z1], [c[i][0], c[i][1], z1]], [nx, ny, 0], col, extra && extra.hk ? { ...extra, hk: i === 0 ? extra.hk + ':1' : i === 2 ? extra.hk + ':-1' : undefined } : extra); }
   };
   let z0 = 0;
   p.floors.forEach((f, fi) => {
     ensureF(f); if (f.mode === 'lista') { z0 += pf(f.h); return; }
     const H0 = pf(f.h), ex = { alpha: !forElev && fi > FL ? .15 : 1, fi };
     f.rooms.forEach(r => quad([[r.x, r.y, z0 + .01], [r.x + r.w, r.y, z0 + .01], [r.x + r.w, r.y + r.l, z0 + .01], [r.x, r.y + r.l, z0 + .01]], [0, 0, 1], '#3a403d', { ...ex, floor: 1 }));
-    segsOf(f).forEach(sg => {
-      const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1); if (L < 1e-3) return;
+    segsOf(f).forEach((sg, si) => {
+      const L = Math.hypot(sg.x2 - sg.x1, sg.y2 - sg.y1); if (L < 1e-3) return; const hk = fi + ':' + si;
       const ux = (sg.x2 - sg.x1) / L, uy = (sg.y2 - sg.y1) / L, nx = -uy, ny = ux, t = (sg.t || wallT(sg.int)) / 2, Hw = sg.h || (sg.muro ? muroDef('muroH') : H0);
-      box([[sg.x1 + nx * t, sg.y1 + ny * t], [sg.x2 + nx * t, sg.y2 + ny * t], [sg.x2 - nx * t, sg.y2 - ny * t], [sg.x1 - nx * t, sg.y1 - ny * t]], z0, z0 + Hw, sg.muro ? '#CDB48C' : sg.int ? '#AEB5B1' : '#E6E1D3', sg.muro ? '#D8C4A0' : '#C9CFCB', { ...ex, wall: 1 });
+      box([[sg.x1 + nx * t, sg.y1 + ny * t], [sg.x2 + nx * t, sg.y2 + ny * t], [sg.x2 - nx * t, sg.y2 - ny * t], [sg.x1 - nx * t, sg.y1 - ny * t]], z0, z0 + Hw, sg.muro ? '#CDB48C' : sg.int ? '#AEB5B1' : '#E6E1D3', sg.muro ? '#D8C4A0' : '#C9CFCB', { ...ex, wall: 1, hk });
       f.ops.filter(op => op.x != null).forEach(op => {
         const dx = op.x - sg.x1, dy = op.y - sg.y1, along = dx * ux + dy * uy, off = Math.abs(dx * nx + dy * ny);
         if (off > .05 || along < -.01 || along > L + .01) return;
         const k = (OP_TYPES[op.t] || {}).k, s0 = along - pf(op.w) / 2, s1 = along + pf(op.w) / 2, zb = z0 + (k === 'janela' ? pf(op.sill ?? .9) : 0), zt = Math.min(z0 + H0 - .05, zb + pf(op.h));
         [1, -1].forEach(sgn => { const o2 = sgn * (t + .004), P2 = (sv2, z) => [sg.x1 + ux * sv2 + nx * o2, sg.y1 + uy * sv2 + ny * o2, z];
-          quad([P2(s0, zb), P2(s1, zb), P2(s1, zt), P2(s0, zt)], [nx * sgn, ny * sgn, 0], k === 'janela' ? '#2A6C80' : k === 'portao' ? '#5a4632' : '#7a5433', { ...ex, decal: 1, stroke: '#FFB23F', kind: k }); });
+          quad([P2(s0, zb), P2(s1, zb), P2(s1, zt), P2(s0, zt)], [nx * sgn, ny * sgn, 0], k === 'janela' ? '#2A6C80' : k === 'portao' ? '#5a4632' : '#7a5433', { ...ex, decal: 1, stroke: '#FFB23F', kind: k, hk: hk + ':' + sgn }); });
       });
     });
     (f.cols || []).forEach(c => { const b = pf(c.b) / 2; box([[c.x - b, c.y - b], [c.x + b, c.y - b], [c.x + b, c.y + b], [c.x - b, c.y + b]], z0, z0 + H0, '#8E9692', '#A3AAA6', ex); });
@@ -1406,25 +1417,36 @@ function draw3D() {
   if (!faces.length) { sv.innerHTML = bg + `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#2b3230" font-size="13" ${MONO}>Desenhe a planta para ver o 3D</text>`; return; }
   const B = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; faces.forEach(fc => fc.pts.forEach(q => { for (let i = 0; i < 3; i++) { B[i] = Math.min(B[i], q[i]); B[i + 3] = Math.max(B[i + 3], q[i]); } }));
   const th = o.yaw * Math.PI / 180, ph = o.pitch * Math.PI / 180, ct = Math.cos(th), st = Math.sin(th), sp = Math.sin(ph), cp = Math.cos(ph);
-  const cx = (B[0] + B[3]) / 2, cy = (B[1] + B[4]) / 2, cz = (B[2] + B[5]) / 2, diag = Math.hypot(B[3] - B[0], B[4] - B[1], B[5] - B[2]) || 1, sc = Math.min(W, H * 1.4) / diag * .95 * o.zoom;
-  const Pj = (x, y, z) => { const X = x - cx, Y = y - cy, Z = z - cz, xr = X * ct - Y * st, yr = X * st + Y * ct; return [W / 2 + o.px + xr * sc, H / 2 + o.py + (yr * sp - Z * cp) * sc, yr * cp + Z * sp]; };
-  const vis = n => (n[0] * st + n[1] * ct) * cp + n[2] * sp > 1e-6, Lt = [-.45, .55, .7];
+  const cx = (B[0] + B[3]) / 2, cy = (B[1] + B[4]) / 2, cz = (B[2] + B[5]) / 2, diag = Math.hypot(B[3] - B[0], B[4] - B[1], B[5] - B[2]) || 1, sc0 = Math.min(W, H * 1.4) / diag * .95, sc = sc0 * o.zoom;
+  // perspectiva: câmara a uma distância Dc do centro (aproximar = a câmara anda para a frente); axonometria: projecção paralela
+  const PS = !!o.persp, D0 = diag * 2.2, Dc = D0 / o.zoom, near = diag * .08;
+  const Pj = (x, y, z) => { const X = x - cx, Y = y - cy, Z = z - cz, xr = X * ct - Y * st, yr = X * st + Y * ct, dd = yr * cp + Z * sp;
+    if (!PS) return [W / 2 + o.px + xr * sc, H / 2 + o.py + (yr * sp - Z * cp) * sc, dd];
+    const k = sc0 * D0 / Math.max(near, Dc - dd); return [W / 2 + o.px + xr * k, H / 2 + o.py + (yr * sp - Z * cp) * k, dd, Dc - dd < near]; };
+  const vx = st * cp, vy = ct * cp, vz = sp, Cam = [cx + vx * Dc, cy + vy * Dc, cz + vz * Dc];
+  const vis = (n, pts) => { if (!PS) return n[0] * vx + n[1] * vy + n[2] * vz > 1e-6; const m = pts.reduce((a, q) => [a[0] + q[0] / pts.length, a[1] + q[1] / pts.length, a[2] + q[2] / pts.length], [0, 0, 0]); return n[0] * (Cam[0] - m[0]) + n[1] * (Cam[1] - m[1]) + n[2] * (Cam[2] - m[2]) > 1e-6; };
+  const Lt = [-.45, .55, .7];
   // chão (terreno) à volta da casa, com quadrícula leve de 1 m
   const gz = B[2] - .02, R0 = Math.max(6, diag * .85), gx0 = Math.floor(cx - R0), gx1 = Math.ceil(cx + R0), gy0 = Math.floor(cy - R0), gy1 = Math.ceil(cy + R0);
   const q2 = (x, y) => { const p = Pj(x, y, gz); return p[0].toFixed(1) + ',' + p[1].toFixed(1); };
-  let s = bg + `<polygon points="${q2(gx0, gy0)} ${q2(gx1, gy0)} ${q2(gx1, gy1)} ${q2(gx0, gy1)}" fill="url(#gnd3)"/>`;
+  const gOK = !PS || [[gx0, gy0], [gx1, gy0], [gx1, gy1], [gx0, gy1]].every(([a, b]) => !Pj(a, b, gz)[3]);
+  let s = bg + (gOK ? `<polygon points="${q2(gx0, gy0)} ${q2(gx1, gy0)} ${q2(gx1, gy1)} ${q2(gx0, gy1)}" fill="url(#gnd3)"/>` : '');
   let gl = ''; const stp = R0 > 40 ? 5 : 1, r2 = Math.round(R0 * .55), hx0 = Math.round(cx) - r2, hx1 = Math.round(cx) + r2, hy0 = Math.round(cy) - r2, hy1 = Math.round(cy) + r2;
   for (let v = hx0; v <= hx1; v += stp) gl += `M${q2(v, hy0)}L${q2(v, hy1)}`; for (let v = hy0; v <= hy1; v += stp) gl += `M${q2(hx0, v)}L${q2(hx1, v)}`;
-  s += `<path d="${gl}" stroke="rgba(60,70,60,.13)" stroke-width=".6" fill="none"/>`;
+  if (gOK) s += `<path d="${gl}" stroke="rgba(60,70,60,.13)" stroke-width=".6" fill="none"/>`;
   const vf = [];
-  faces.forEach(fc => { if (!fc.floor && !vis(fc.n)) return; const pr = fc.pts.map(q => Pj(...q)); vf.push({ fc, pr, d: pr.reduce((t, q) => t + q[2], 0) / pr.length + (fc.decal ? .03 : 0) + (fc.floor ? -.02 : 0) }); });
+  faces.forEach(fc => { if (!fc.floor && !vis(fc.n, fc.pts)) return; const pr = fc.pts.map(q => Pj(...q)); if (PS && pr.some(q => q[3])) return; vf.push({ fc, pr, d: pr.reduce((t, q) => t + q[2], 0) / pr.length + (fc.decal ? .03 : 0) + (fc.floor ? -.02 : 0) }); });
+  // portas/janelas: desenhadas logo depois dos pedaços da parede onde estão (não ficam tapadas pela própria parede)
+  const cen = pts => pts.reduce((a, q) => [a[0] + q[0] / pts.length, a[1] + q[1] / pts.length], [0, 0]), hostD = {};
+  vf.forEach(v => { if (v.fc.hk && !v.fc.decal) (hostD[v.fc.hk] = hostD[v.fc.hk] || []).push({ c: cen(v.fc.pts), d: v.d }); });
+  vf.forEach(v => { if (!v.fc.decal || !hostD[v.fc.hk]) return; const c = cen(v.fc.pts), r = Math.hypot(v.fc.pts[0][0] - v.fc.pts[1][0], v.fc.pts[0][1] - v.fc.pts[1][1]) / 2 + .7;
+    hostD[v.fc.hk].forEach(h => { if (Math.hypot(h.c[0] - c[0], h.c[1] - c[1]) < r) v.d = Math.max(v.d, h.d + 1e-4); }); });
   vf.sort((a, b) => a.d - b.d);
   vf.forEach(({ fc, pr }) => { const pts = pr.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' '), sh = fc.n[2] > .5 ? 0 : Math.max(0, .45 - (fc.n[0] * Lt[0] + fc.n[1] * Lt[1]) * .45), col = fc.fill[0] === '#' && fc.fill.length === 7 ? shade(fc.fill, sh) : fc.fill;
     let eg = ''; if (fc.eg) for (let i = 0; i < pr.length; i++) if (fc.eg[i]) { const a2 = pr[i], b2 = pr[(i + 1) % pr.length]; eg += `M${a2[0].toFixed(1)},${a2[1].toFixed(1)}L${b2[0].toFixed(1)},${b2[1].toFixed(1)}`; }
     s += `<g${fc.alpha < 1 ? ` opacity="${fc.alpha}"` : ''}><polygon points="${pts}" fill="${col}" stroke="${fc.stroke || col}" stroke-width="${fc.stroke ? 1 : .7}" stroke-linejoin="round"/>${eg && !fc.stroke ? `<path d="${eg}" stroke="rgba(20,25,23,.45)" stroke-width=".8" fill="none"/>` : ''}</g>`; });
-  s += `<text x="10" y="${H - 10}" font-size="10" fill="#2b3230" ${MONO}>arraste = girar · 2 dedos/roda = zoom</text>`;
   sv.innerHTML = s;
-  const stt = $('edStatus'); if (stt) stt.textContent = `3D · ${P().floors.length} ${P().floors.length === 1 ? 'piso' : 'pisos'} · piso activo em destaque`;
+  const stt = $('edStatus'); if (stt) stt.textContent = `3D ${o.persp ? 'perspectiva' : 'axonometria'} · arraste = girar · 2 dedos/roda = ${o.persp ? 'aproximar' : 'zoom'}`;
 }
 /* ---------- alçados (vista ortogonal de cada lado) ---------- */
 function drawElev(v) {
@@ -1699,6 +1721,8 @@ document.addEventListener('click', e => {
   const vw = t.closest('[data-view]'); if (vw) { ED.view = vw.dataset.view; ED.draw = null; ED.orb.px = ED.orb.py = 0; ED.orb.zoom = 1; if (ED.view !== 'plan') { ED.tool = 'mover'; } drawEd(); buzz(); return; }
   if (t.closest('[data-fit]')) { if (ED.view === 'plan') fitView(); else { ED.orb.zoom = 1; ED.orb.px = ED.orb.py = 0; } drawEd(); return; }
   const zm = t.closest('[data-zoom]'); if (zm) { if (ED.view !== 'plan') { ED.orb.zoom = Math.min(20, Math.max(.3, ED.orb.zoom * (zm.dataset.zoom === 'in' ? 1.3 : .77))); drawEd(); } else zoomTo(ED.G * (zm.dataset.zoom === 'in' ? .75 : 1.33)); return; }
+  const pj = t.closest('[data-proj]'); if (pj) { ED.orb.persp = +pj.dataset.proj; store.set('oc-persp', ED.orb.persp); ED.orb.zoom = 1; ED.orb.px = ED.orb.py = 0; drawEd(); buzz(); return; }
+  const v3b = t.closest('[data-v3]'); if (v3b) { const iso = v3b.dataset.v3 === 'iso'; ED.orb.yaw = iso ? 45 : 0; ED.orb.pitch = iso ? 35.26 : 88; ED.orb.zoom = 1; ED.orb.px = ED.orb.py = 0; if (iso) { ED.orb.persp = 0; store.set('oc-persp', 0); } drawEd(); buzz(); return; }
   if (t.closest('[data-dimok]')) { applyDimEdit(); return; }
   if (t.closest('[data-dimx]')) { closeDimEdit(); return; }
   if (t.closest('[data-dbok]')) { applyDrawBox(); return; }
