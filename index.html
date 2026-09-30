@@ -52,6 +52,7 @@ img{max-width:100%}
 
 
 
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -418,6 +419,7 @@ const PARAMS = {
   sapB: .6, sapH: .3, limpeza: .05, muretH: .6, vfB: .2, vfH: .2, massame: .07,
   pilB: .15, pilEsp: 3.5, pilN: '', vigB: .15, vigH: .2, lajeE: .12,
   cobertura: 'chapa', incl: 15, beirado: .5, chapaW: .76, chapaL: 3, madeira: 2.5,
+  tracoEst: '1:2:3', tracoLimp: '1:3:6', tracoMass: '1:3:5', argAss: 6, argReb: 4, muroReb: 2,
   rebocoE: .02, tintaDem: 2, tintaRend: 10,
   acoSap: 50, acoVig: 100, acoPil: 120, acoLaje: 80, acoVerga: 60, varaoD: 10,
   muroH: 1.8, muroBloco: 15, muroPilEsp: 3,
@@ -429,7 +431,8 @@ const PARAM_UI = [
   ['Estrutura', [['pilB', 'Pilar: lado', 'm'], ['pilEsp', 'Espaçamento de pilares', 'm'], ['pilN', 'Nº de pilares por piso (vazio = automático)', 'un'], ['vigB', 'Viga/cinta: largura', 'm'], ['vigH', 'Viga/cinta: altura', 'm'], ['lajeE', 'Laje: espessura', 'm']]],
   ['Aço (taxas)', [['acoSap', 'Sapatas', 'kg/m³'], ['acoVig', 'Vigas', 'kg/m³'], ['acoPil', 'Pilares', 'kg/m³'], ['acoLaje', 'Lajes', 'kg/m³'], ['acoVerga', 'Vergas', 'kg/m³'], ['varaoD', 'Diâmetro médio do varão', 'mm', [8, 10, 12, 16]]]],
   ['Cobertura', [['cobertura', 'Tipo de cobertura', '', ['chapa', 'laje']], ['incl', 'Inclinação', 'graus'], ['beirado', 'Beirado', 'm'], ['chapaW', 'Chapa: largura útil', 'm'], ['chapaL', 'Chapa: comprimento', 'm'], ['madeira', 'Madeira (barrotes/ripas)', 'm/m²']]],
-  ['Muro de vedação', [['muroH', 'Altura do muro', 'm'], ['muroBloco', 'Bloco do muro', 'cm', [10, 15, 20]], ['muroPilEsp', 'Espaçamento dos pilaretes', 'm']]],
+  ['Traços (betão e argamassa)', [['tracoEst', 'Betão estrutural (sapatas, pilares, vigas, lajes)', '', ['1:2:3', '1:2:4', '1:3:5']], ['tracoMass', 'Massame / piso térreo', '', ['1:2:4', '1:3:5', '1:3:6']], ['tracoLimp', 'Betão de limpeza', '', ['1:3:6', '1:4:8']], ['argAss', 'Argamassa de assentamento 1:', '', [4, 5, 6, 8]], ['argReb', 'Argamassa de reboco 1:', '', [3, 4, 5, 6]]]],
+  ['Muro de vedação', [['muroReb', 'Faces rebocadas do muro', '', [0, 1, 2]], ['muroH', 'Altura do muro', 'm'], ['muroBloco', 'Bloco do muro', 'cm', [10, 15, 20]], ['muroPilEsp', 'Espaçamento dos pilaretes', 'm']]],
   ['Acabamentos', [['rebocoE', 'Reboco: espessura', 'm'], ['tintaDem', 'Tinta: demãos', 'un'], ['tintaRend', 'Tinta: rendimento', 'm²/L'], ['maoObra', 'Mão de obra', '% materiais']]]
 ];
 const PRICE_ITEMS = [
@@ -485,7 +488,7 @@ function floorGeom(f) {
   });
   let ext = 0, int = 0; cnt.forEach(c => { if (c === 1) ext += U; else int += U; });
   const fw = [], muro = [];
-  (f.walls || []).forEach(w => { const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1); if (w.type === 'muro') { muro.push({ L, bl: w.bl, h: w.h }); return; } if (w.type === 'ext') ext += L; else int += L; if (pf(w.bl) || pf(w.h)) fw.push({ L, int: w.type === 'int', bl: w.bl, h: w.h }); });
+  (f.walls || []).forEach(w => { const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1); if (w.type === 'muro') { muro.push({ L, bl: w.bl, h: w.h, a: [w.x1, w.y1], b: [w.x2, w.y2] }); return; } if (w.type === 'ext') ext += L; else int += L; if (pf(w.bl) || pf(w.h)) fw.push({ L, int: w.type === 'int', bl: w.bl, h: w.h }); });
   let area = f.rooms.reduce((t, r) => t + r.w * r.l, 0);
   // só paredes (sem compartimentos): usa as lajes desenhadas ou o rectângulo das paredes exteriores
   if (!area) { area = (f.slabs || []).reduce((t, r) => t + slabArea(r), 0);
@@ -516,6 +519,8 @@ function calc(p) {
   const stages = [];
   const mk = (name) => { const s = { name, info: [], mat: {} }; stages.push(s); return s; };
   const add = (s, k, q) => { s.mat[k] = (s.mat[k] || 0) + q; };
+  const TR = k => { const v = String(X[k] || PARAMS[k]).split(':').map(Number); return v.length === 3 && v.every(n => n > 0) ? v : PARAMS[k].split(':').map(Number); };
+  const tE0 = TR('tracoEst'), tL0 = TR('tracoLimp'), tM0 = TR('tracoMass'), nAss = pf(X.argAss) || 6, nReb = pf(X.argReb) || 4, JW = 1.15;
   const addConc = (s, V, tr) => { const m = concreteMat(V * perd, tr); add(s, 'cimento', m.cim); add(s, 'areia', m.areia); add(s, 'brita', m.brita); };
   const addMort = (s, V, n) => { const m = mortarMat(V * perd, n); add(s, 'cimento', m.cim); add(s, 'areia', m.areia); };
   const addSteel = (s, kg) => { if (kg <= 0) return; add(s, 'varao', kg * perd / (kgm * 12)); add(s, 'arame', kg * .012); s.aco = (s.aco || 0) + kg; };
@@ -532,16 +537,16 @@ function calc(p) {
     const nS = F.fund.n, a = pf(X.sapL) || 1, h = pf(X.sapHi) || .3, prof = Math.max(h + .2, pf(X.sapProf) || 1), lp = pf(X.limpeza);
     const Vsap = nS * a * a * h, Vlimp = nS * (a + .1) ** 2 * lp, Vpesc = nS * pf(X.pilB) ** 2 * Math.max(0, prof - h - lp);
     add(F, 'escavacao', nS * (a + .3) ** 2 * prof + Lf * (pf(X.vfB) + .2) * (pf(X.vfH) + pf(X.muretH) * .5));
-    addConc(F, Vlimp + Vmass, [1, 3, 6]); addConc(F, Vsap + Vvf + Vpesc, [1, 2, 3]);
-    add(F, 'bloco20', b20); addMort(F, Amur * Math.max(0, 1 - bpm2(j) * .08) * .2 * 1.3, 6);
+    addConc(F, Vlimp, tL0); addConc(F, Vmass, tM0); addConc(F, Vsap + Vvf + Vpesc, tE0);
+    add(F, 'bloco20', b20); addMort(F, Amur * Math.max(0, 1 - bpm2(j) * .08) * .2 * JW, nAss);
     addSteel(F, Vsap * pf(X.acoSap) + Vvf * pf(X.acoVig) + Vpesc * pf(X.acoPil));
     add(F, 'cofragem', Lf * pf(X.vfH) * 2 + nS * 4 * a * h + nS * 4 * pf(X.pilB) * Math.max(0, prof - h));
     F.info = [`${nS} sapatas isoladas ${fmt(a, 2)} × ${fmt(a, 2)} × ${fmt(h, 2)} m · ${fmt(Vsap, 2)} m³`, `arranques dos pilares ${fmt(Vpesc, 2)} m³`, `limpeza ${fmt(Vlimp, 2)} m³`, `viga de fundação ${fmt(Vvf, 2)} m³ (${fmt(Lf, 1)} m)`, `murete ${fmt(Amur, 1)} m²`, `massame ${fmt(Vmass, 2)} m³`];
   } else {
     const Vlimp = Lf * pf(X.sapB) * pf(X.limpeza), Vsap = Lf * pf(X.sapB) * pf(X.sapH);
     add(F, 'escavacao', Lf * pf(X.sapB) * (pf(X.limpeza) + pf(X.sapH) + pf(X.muretH) * .5));
-    addConc(F, Vlimp + Vmass, [1, 3, 6]); addConc(F, Vsap + Vvf, [1, 2, 3]);
-    add(F, 'bloco20', b20); addMort(F, Amur * Math.max(0, 1 - bpm2(j) * .08) * .2 * 1.3, 6);
+    addConc(F, Vlimp, tL0); addConc(F, Vmass, tM0); addConc(F, Vsap + Vvf, tE0);
+    add(F, 'bloco20', b20); addMort(F, Amur * Math.max(0, 1 - bpm2(j) * .08) * .2 * JW, nAss);
     addSteel(F, Vsap * pf(X.acoSap) + Vvf * pf(X.acoVig));
     add(F, 'cofragem', Lf * pf(X.vfH) * 2);
     F.info = [`${fmt(Lf, 1)} m de sapata corrida`, `betão sapatas ${fmt(Vsap, 2)} m³`, `limpeza ${fmt(Vlimp, 2)} m³`, `viga de fundação ${fmt(Vvf, 2)} m³`, `murete ${fmt(Amur, 1)} m²`, `massame ${fmt(Vmass, 2)} m³`];
@@ -565,7 +570,7 @@ function calc(p) {
   const top = G[G.length - 1] ? G[G.length - 1].g : { foot: 0, ext: 0 };
   if (!drawnSlabs && X.cobertura === 'laje') Alaje += top.foot;
   const Vlaje = drawnSlabs ? VlajeD : Alaje * pf(X.lajeE); cof += Alaje;
-  addConc(E, Vpil + Vvig + Vver + Vlaje, [1, 2, 3]);
+  addConc(E, Vpil + Vvig + Vver + Vlaje, tE0);
   addSteel(E, Vpil * pf(X.acoPil) + Vvig * pf(X.acoVig) + Vlaje * pf(X.acoLaje) + Vver * pf(X.acoVerga));
   add(E, 'cofragem', cof);
   E.info = [`${npT} pilares${nDrawn.col ? ' (desenhados)' : ''} · ${fmt(Vpil, 2)} m³`, `vigas${nDrawn.beam ? ' desenhadas' : '/cintas'} ${fmt(Vvig, 2)} m³`, `vergas ${fmt(Vver, 2)} m³`, Alaje > 0 ? `lajes${drawnSlabs ? ' desenhadas' : ''} ${fmt(Alaje, 1)} m² · ${fmt(Vlaje, 2)} m³` : 'sem lajes', `aço ${fmt(E.aco || 0, 0)} kg`];
@@ -578,9 +583,9 @@ function calc(p) {
     // paredes com bloco ou altura próprios
     (g.fw || []).forEach(w => { const hh = pf(w.h) || H, b = pf(w.bl) || (w.int ? tI : tE); if (w.int) { ai -= w.L * H; AI += w.L * hh; } else { ae -= w.L * H; AE += w.L * hh; } addB(b, w.L * hh); nCustom++; });
     ae = Math.max(0, ae); ai = Math.max(0, ai); AE += ae; AI += ai; addB(tE, ae); addB(tI, ai); });
-  Object.entries(blk).forEach(([b, A]) => { add(W, 'bloco' + b, A * pm * perd); if (j > 0) addMort(W, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * 1.3, 6); });
+  Object.entries(blk).forEach(([b, A]) => { add(W, 'bloco' + b, A * pm * perd); if (j > 0) addMort(W, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * JW, nAss); });
   const Areb = 2 * (AE + AI);
-  addMort(W, Areb * pf(X.rebocoE) * 1.15, 4);
+  addMort(W, Areb * pf(X.rebocoE) * 1.1, nReb);
   W.info = [`paredes exteriores ${fmt(AE, 1)} m² (bloco ${tE})`, `interiores ${fmt(AI, 1)} m² (bloco ${tI})`, ...(nCustom ? [`${nCustom} paredes com bloco/altura próprios`] : []), `reboco ${fmt(Areb, 1)} m²`];
 
   // 3b. Muro de vedação (paredes marcadas como muro)
@@ -590,16 +595,18 @@ function calc(p) {
     M = mk('Muro de vedação');
     const hD = pf(X.muroH) || PARAMS.muroH, bD = pf(X.muroBloco) || PARAMS.muroBloco, esp = pf(X.muroPilEsp) || PARAMS.muroPilEsp, byB = {};
     let Lm = 0, Am = 0, np = 0;
-    muros.forEach(m => { const h = pf(m.h) || hD, b = pf(m.bl) || bD; Lm += m.L; Am += m.L * h; byB[b] = (byB[b] || 0) + m.L * h; np += Math.ceil(m.L / esp) + 1; });
-    Object.entries(byB).forEach(([b, A]) => { add(M, 'bloco' + b, A * pm * perd); if (j > 0) addMort(M, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * 1.3, 6); });
+    const ends = []; muros.forEach(m => { const h = pf(m.h) || hD, b = pf(m.bl) || bD; Lm += m.L; Am += m.L * h; byB[b] = (byB[b] || 0) + m.L * h; np += Math.max(0, Math.ceil(m.L / esp) - 1);
+      [m.a, m.b].forEach(pt => { if (pt && !ends.some(e => Math.hypot(e[0] - pt[0], e[1] - pt[1]) < .05)) ends.push(pt); }); });
+    np += ends.length || muros.length + 1; // pilaretes intermédios + um em cada ponta/canto (cantos partilhados contam uma vez)
+    Object.entries(byB).forEach(([b, A]) => { add(M, 'bloco' + b, A * pm * perd); if (j > 0) addMort(M, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * JW, nAss); });
     const isoM = (X.fundTipo || 'isolada') !== 'corrida', ms = .6, hA = Lm ? Am / Lm : hD;
     const Vl = isoM ? np * (ms + .1) ** 2 * pf(X.limpeza) : Lm * pf(X.sapB) * pf(X.limpeza), Vs = isoM ? np * ms * ms * .25 + Lm * pf(X.vfB) * pf(X.vfH) : Lm * pf(X.sapB) * pf(X.sapH), Vp = np * pf(X.pilB) ** 2 * (hA + (isoM ? .6 : pf(X.sapH))), Vc = Lm * pf(X.vigB) * pf(X.vigH);
     add(M, 'escavacao', isoM ? np * (ms + .2) ** 2 * .8 + Lm * (pf(X.vfB) + .2) * pf(X.vfH) : Lm * pf(X.sapB) * (pf(X.limpeza) + pf(X.sapH) + .2));
-    addConc(M, Vl, [1, 3, 6]); addConc(M, Vs + Vp + Vc, [1, 2, 3]);
+    addConc(M, Vl, tL0); addConc(M, Vs + Vp + Vc, tE0);
     addSteel(M, Vs * pf(X.acoSap) + Vp * pf(X.acoPil) + Vc * pf(X.acoVig));
     add(M, 'cofragem', np * 4 * pf(X.pilB) * hA + Lm * pf(X.vigH) * 2);
-    addMort(M, 2 * Am * pf(X.rebocoE) * 1.15, 4);
-    M.info = [`${fmt(Lm, 1)} m de muro · ${fmt(Am, 1)} m² (altura média ${fmt(hA, 2)} m)`, `${np} pilaretes · cinta de coroamento ${fmt(Vc, 2)} m³`, (isoM ? `${np} sapatas de pilarete + viga de fundação ${fmt(Vs, 2)} m³` : `sapata corrida ${fmt(Vs, 2)} m³`), `reboco 2 faces ${fmt(2 * Am, 1)} m²`];
+    const fR = X.muroReb === '' || X.muroReb == null ? 2 : pf(X.muroReb); if (fR > 0) addMort(M, fR * Am * pf(X.rebocoE) * 1.1, nReb);
+    M.info = [`${fmt(Lm, 1)} m de muro · ${fmt(Am, 1)} m² (altura média ${fmt(hA, 2)} m)`, `${np} pilaretes · cinta de coroamento ${fmt(Vc, 2)} m³`, (isoM ? `${np} sapatas de pilarete + viga de fundação ${fmt(Vs, 2)} m³` : `sapata corrida ${fmt(Vs, 2)} m³`), (fR > 0 ? `reboco ${fR} ${fR === 1 ? 'face' : 'faces'} ${fmt(fR * Am, 1)} m²` : 'sem reboco')];
   }
 
   // 4. Cobertura
@@ -625,7 +632,7 @@ function calc(p) {
   G.forEach(({ f, g }) => { const ps = f.pisos || []; if (!ps.length) { pCer += g.area; return; }
     ps.forEach(pz => { const a = Math.abs(pz.pts.reduce((t, p, i) => { const q = pz.pts[(i + 1) % pz.pts.length]; return t + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2; nPz++;
       if (pz.t === 'pave') pPave += a; else if (pz.t === 'madeira') pMad += a; else if (pz.t === 'cimento') pCim += a; else pCer += a; }); });
-  add(A, 'pavimento', pCer * perd); add(A, 'pave', pPave * perd); add(A, 'flutuante', pMad * perd); if (pCim) addMort(A, pCim * .04, 4); add(A, 'rodape', rod * perd); add(A, 'tinta', Math.ceil(litros / 20 * 10) / 10);
+  add(A, 'pavimento', pCer * perd); add(A, 'pave', pPave * perd); add(A, 'flutuante', pMad * perd); if (pCim) addMort(A, pCim * .04, nReb); add(A, 'rodape', rod * perd); add(A, 'tinta', Math.ceil(litros / 20 * 10) / 10);
   // loiças e bancas: se foram colocadas na planta contam-se os objectos; senão pelos compartimentos
   const objs = G.flatMap(x => x.f.objs || []), nSan = objs.filter(o => o.k === 'sanita').length, nBan = objs.filter(o => o.k === 'banca').length;
   if (nSan) nwc = nSan; if (nBan) ncoz = nBan;
@@ -757,6 +764,7 @@ async function loadImage(file) {
   const f = floor(), wm = 20; f.img = { src, wm, hm: wm * c.height / c.width, op: .5, cal: 0 }; delete IMGS[f.id];
   ED.tool = 'calib'; ED.calib = []; changed(); fitView(); render(); toast('Planta carregada: agora calibre a escala');
 }
+
 
 
 
@@ -2098,12 +2106,19 @@ function fundCtl(fd) {
   return `<div class="fundctl"><div class="seg" data-popt="fundTipo"><button data-v="isolada" aria-pressed="${fd.iso}">Sapatas isoladas</button><button data-v="corrida" aria-pressed="${!fd.iso}">Sapata corrida</button></div>
     ${fd.iso ? `<div class="sapn"><span>Nº de sapatas</span><button class="iconbtn" data-sapstep="-1" aria-label="Menos">−</button><b>${fd.n}</b><button class="iconbtn" data-sapstep="1" aria-label="Mais">+</button>${pf(P().params.sapN) ? `<button class="chip" data-sapstep="0">auto (${fd.nAuto})</button>` : '<small>uma por pilar</small>'}</div>` : ''}</div>`;
 }
+function yieldCard(X) {
+  const tr = k => String(X[k] || PARAMS[k]).split(':').map(Number), row = (n, t) => { const m = concreteMat(1, t); return `<div class="mrow"><span>${n} (${t.join(':')})</span><b>${fmt(m.cim, 1)} sacos</b><small>${fmt(m.areia, 2)} m³ areia · ${fmt(m.brita, 2)} m³ brita por m³</small></div>`; };
+  const mrow = (n, k) => { const v = pf(X[k]) || PARAMS[k], m = mortarMat(1, v); return `<div class="mrow"><span>${n} (1:${v})</span><b>${fmt(m.cim, 1)} sacos</b><small>${fmt(m.areia, 2)} m³ areia por m³</small></div>`; };
+  return `<div class="card" style="--i:8"><div class="card-title"><i>≈</i>Consumo por m³ (antes de perdas)</div><div class="mlist">${row('Betão estrutural', tr('tracoEst'))}${row('Massame', tr('tracoMass'))}${row('Betão de limpeza', tr('tracoLimp'))}${mrow('Assentamento', 'argAss')}${mrow('Reboco', 'argReb')}</div>
+    <p class="hint">Volumes em seco: betão × 1,54 e argamassa × 1,30; cimento a 1440 kg/m³ (saco de 50 kg). Blocos 40×20 com junta ${fmt(pf(X.junta), 1)} cm: ${fmt(bpm2(pf(X.junta) / 100), 1)} blocos/m².</p></div>`;
+}
 function paramHTML() {
   const X = P().params;
   return `<section class="sec" id="sec-param"><div class="sec-head" style="--i:0"><h2>Dados <em>técnicos</em></h2><p>Ajuste ao seu método de construção</p></div>
   ${PARAM_UI.map(([g, items], gi) => `<div class="card" style="--i:${gi + 1}"><div class="card-title"><i>${String(gi + 1).padStart(2, '0')}</i>${g}</div>
-    <div class="fields">${items.map(([k, n, u, opts]) => opts ? `<label class="field"><span>${n}</span><div class="seg" data-popt="${k}">${opts.map(v => `<button data-v="${v}" aria-pressed="${String(X[k]) === String(v)}">${typeof v === 'number' ? v + (u ? ' ' + u : '') : ({ chapa: 'Chapa', laje: 'Laje', isolada: 'Sapatas isoladas', corrida: 'Sapata corrida' }[v] || v)}</button>`).join('')}</div></label>`
+    <div class="fields">${items.map(([k, n, u, opts]) => opts ? `<label class="field"><span>${n}</span><div class="seg" data-popt="${k}">${opts.map(v => `<button data-v="${v}" aria-pressed="${String(X[k]) === String(v)}">${typeof v === 'number' ? (k === 'argAss' || k === 'argReb' ? '1:' + v : k === 'muroReb' ? v + (v === 1 ? ' face' : ' faces') : v + (u ? ' ' + u : '')) : ({ chapa: 'Chapa', laje: 'Laje', isolada: 'Sapatas isoladas', corrida: 'Sapata corrida' }[v] || v)}</button>`).join('')}</div></label>`
       : numF(n, X[k], u, `data-pk="${k}" step="any"`, String(PARAMS[k]))).join('')}</div></div>`).join('')}
+  ${yieldCard(X)}
   <div class="row noprint" style="--i:9"><button class="btn ghost" data-resetparams>Repor valores padrão</button></div>
   </section>`;
 }
