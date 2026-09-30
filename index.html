@@ -53,6 +53,7 @@ img{max-width:100%}
 
 
 
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -166,6 +167,8 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .seg.ptypes{display:grid;grid-template-columns:1fr 1fr;gap:4px}.seg.ptypes button{min-width:0}
 @media (max-width:480px){.ed-selbar .lbl{display:none}}
 .fundctl{display:grid;gap:8px;margin:6px 0 10px}.sapn{display:flex;align-items:center;gap:8px;font:600 12px var(--body);color:var(--muted)}.sapn b{font:800 18px var(--mono);color:var(--ink);min-width:32px;text-align:center}.sapn small{color:var(--dim)}
+.optctl{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}.optctl .chip.ptog{font-size:12px;padding:7px 10px}.optctl .chip.ptog[aria-pressed="false"]{opacity:.55;text-decoration:line-through}.optctl .chip.ptog[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
+.seg.mini{display:flex;align-items:center;gap:3px;flex-wrap:wrap}.seg.mini span{font:700 11px var(--mono);color:var(--muted);padding:0 6px}.seg.mini button{padding:6px 9px;font-size:12px}
 .gpair{border:1px solid var(--line2);border-radius:12px;padding:10px;display:grid;gap:8px;background:rgba(61,220,151,.05)}
 .gp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;font:700 11px var(--mono)}
 .gp-a{color:#3DDC97}.gp-b{color:var(--accent)}
@@ -419,6 +422,7 @@ const PARAMS = {
   sapB: .6, sapH: .3, limpeza: .05, muretH: .6, vfB: .2, vfH: .2, massame: .07,
   pilB: .15, pilEsp: 3.5, pilN: '', vigB: .15, vigH: .2, lajeE: .12,
   cobertura: 'chapa', incl: 15, beirado: .5, chapaW: .76, chapaL: 3, madeira: 2.5,
+  optVigaF: 1, optMurete: 1, optMassame: 1, optRebExt: 1, optRebInt: 1, optPintura: 1, optRodape: 1, muroViga: 1, muroCinta: 1, muroPil: 1, muroSap: 1,
   tracoEst: '1:2:3', tracoLimp: '1:3:6', tracoMass: '1:3:5', argAss: 6, argReb: 4, muroReb: 2,
   rebocoE: .02, tintaDem: 2, tintaRend: 10,
   acoSap: 50, acoVig: 100, acoPil: 120, acoLaje: 80, acoVerga: 60, varaoD: 10,
@@ -431,8 +435,9 @@ const PARAM_UI = [
   ['Estrutura', [['pilB', 'Pilar: lado', 'm'], ['pilEsp', 'Espaçamento de pilares', 'm'], ['pilN', 'Nº de pilares por piso (vazio = automático)', 'un'], ['vigB', 'Viga/cinta: largura', 'm'], ['vigH', 'Viga/cinta: altura', 'm'], ['lajeE', 'Laje: espessura', 'm']]],
   ['Aço (taxas)', [['acoSap', 'Sapatas', 'kg/m³'], ['acoVig', 'Vigas', 'kg/m³'], ['acoPil', 'Pilares', 'kg/m³'], ['acoLaje', 'Lajes', 'kg/m³'], ['acoVerga', 'Vergas', 'kg/m³'], ['varaoD', 'Diâmetro médio do varão', 'mm', [8, 10, 12, 16]]]],
   ['Cobertura', [['cobertura', 'Tipo de cobertura', '', ['chapa', 'laje']], ['incl', 'Inclinação', 'graus'], ['beirado', 'Beirado', 'm'], ['chapaW', 'Chapa: largura útil', 'm'], ['chapaL', 'Chapa: comprimento', 'm'], ['madeira', 'Madeira (barrotes/ripas)', 'm/m²']]],
+  ['O que entra na obra', [['optVigaF', 'Viga de fundação (casa)', '', [1, 0]], ['optMurete', 'Murete de fundação', '', [1, 0]], ['optMassame', 'Massame / piso térreo', '', [1, 0]], ['optRebExt', 'Reboco exterior', '', [1, 0]], ['optRebInt', 'Reboco interior', '', [1, 0]], ['optPintura', 'Pintura', '', [1, 0]], ['optRodape', 'Rodapé', '', [1, 0]]]],
   ['Traços (betão e argamassa)', [['tracoEst', 'Betão estrutural (sapatas, pilares, vigas, lajes)', '', ['1:2:3', '1:2:4', '1:3:5']], ['tracoMass', 'Massame / piso térreo', '', ['1:2:4', '1:3:5', '1:3:6']], ['tracoLimp', 'Betão de limpeza', '', ['1:3:6', '1:4:8']], ['argAss', 'Argamassa de assentamento 1:', '', [4, 5, 6, 8]], ['argReb', 'Argamassa de reboco 1:', '', [3, 4, 5, 6]]]],
-  ['Muro de vedação', [['muroReb', 'Faces rebocadas do muro', '', [0, 1, 2]], ['muroH', 'Altura do muro', 'm'], ['muroBloco', 'Bloco do muro', 'cm', [10, 15, 20]], ['muroPilEsp', 'Espaçamento dos pilaretes', 'm']]],
+  ['Muro de vedação', [['muroReb', 'Faces rebocadas do muro', '', [0, 1, 2]], ['muroViga', 'Viga de fundação do muro', '', [1, 0]], ['muroSap', 'Sapatas dos pilaretes', '', [1, 0]], ['muroPil', 'Pilaretes', '', [1, 0]], ['muroCinta', 'Cinta de coroamento', '', [1, 0]], ['muroH', 'Altura do muro', 'm'], ['muroBloco', 'Bloco do muro', 'cm', [10, 15, 20]], ['muroPilEsp', 'Espaçamento dos pilaretes', 'm']]],
   ['Acabamentos', [['rebocoE', 'Reboco: espessura', 'm'], ['tintaDem', 'Tinta: demãos', 'un'], ['tintaRend', 'Tinta: rendimento', 'm²/L'], ['maoObra', 'Mão de obra', '% materiais']]]
 ];
 const PRICE_ITEMS = [
@@ -519,6 +524,7 @@ function calc(p) {
   const stages = [];
   const mk = (name) => { const s = { name, info: [], mat: {} }; stages.push(s); return s; };
   const add = (s, k, q) => { s.mat[k] = (s.mat[k] || 0) + q; };
+  const ON = k => { const v = X[k]; return v === undefined || v === '' ? true : !!pf(v); };
   const TR = k => { const v = String(X[k] || PARAMS[k]).split(':').map(Number); return v.length === 3 && v.every(n => n > 0) ? v : PARAMS[k].split(':').map(Number); };
   const tE0 = TR('tracoEst'), tL0 = TR('tracoLimp'), tM0 = TR('tracoMass'), nAss = pf(X.argAss) || 6, nReb = pf(X.argReb) || 4, JW = 1.15;
   const addConc = (s, V, tr) => { const m = concreteMat(V * perd, tr); add(s, 'cimento', m.cim); add(s, 'areia', m.areia); add(s, 'brita', m.brita); };
@@ -529,10 +535,10 @@ function calc(p) {
   // 1. Fundação — sapatas isoladas (padrão em Moçambique) ou sapata corrida (opcional)
   const F = mk('Fundação');
   const Lf = g0.ext + g0.int, iso = (X.fundTipo || 'isolada') !== 'corrida';
-  const Vvf = Lf * pf(X.vfB) * pf(X.vfH), Vmass = g0.area * pf(X.massame);
-  const Amur = Lf * pf(X.muretH), b20 = Amur * bpm2(j) * perd;
+  const Vvf = ON('optVigaF') ? Lf * pf(X.vfB) * pf(X.vfH) : 0, Vmass = ON('optMassame') ? g0.area * pf(X.massame) : 0;
+  const Amur = ON('optMurete') ? Lf * pf(X.muretH) : 0, b20 = Amur * bpm2(j) * perd;
   const f0 = G[0] ? G[0].f : null, nAuto = f0 && (f0.cols || []).length ? f0.cols.length : (pf(X.pilN) || (g0.ext > 0 ? Math.max(4, Math.ceil(g0.ext / pf(X.pilEsp || 3.5))) : 0));
-  F.fund = { iso, nAuto, n: pf(X.sapN) || nAuto };
+  F.fund = { iso, nAuto, n: pf(X.sapN) || nAuto }; F.opts = ['optVigaF', 'optMurete', 'optMassame'];
   if (iso) {
     const nS = F.fund.n, a = pf(X.sapL) || 1, h = pf(X.sapHi) || .3, prof = Math.max(h + .2, pf(X.sapProf) || 1), lp = pf(X.limpeza);
     const Vsap = nS * a * a * h, Vlimp = nS * (a + .1) ** 2 * lp, Vpesc = nS * pf(X.pilB) ** 2 * Math.max(0, prof - h - lp);
@@ -584,9 +590,9 @@ function calc(p) {
     (g.fw || []).forEach(w => { const hh = pf(w.h) || H, b = pf(w.bl) || (w.int ? tI : tE); if (w.int) { ai -= w.L * H; AI += w.L * hh; } else { ae -= w.L * H; AE += w.L * hh; } addB(b, w.L * hh); nCustom++; });
     ae = Math.max(0, ae); ai = Math.max(0, ai); AE += ae; AI += ai; addB(tE, ae); addB(tI, ai); });
   Object.entries(blk).forEach(([b, A]) => { add(W, 'bloco' + b, A * pm * perd); if (j > 0) addMort(W, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * JW, nAss); });
-  const Areb = 2 * (AE + AI);
-  addMort(W, Areb * pf(X.rebocoE) * 1.1, nReb);
-  W.info = [`paredes exteriores ${fmt(AE, 1)} m² (bloco ${tE})`, `interiores ${fmt(AI, 1)} m² (bloco ${tI})`, ...(nCustom ? [`${nCustom} paredes com bloco/altura próprios`] : []), `reboco ${fmt(Areb, 1)} m²`];
+  const Areb = (ON('optRebExt') ? AE : 0) + (ON('optRebInt') ? AE + 2 * AI : 0); W.opts = ['optRebExt', 'optRebInt'];
+  if (Areb > 0) addMort(W, Areb * pf(X.rebocoE) * 1.1, nReb);
+  W.info = [`paredes exteriores ${fmt(AE, 1)} m² (bloco ${tE})`, `interiores ${fmt(AI, 1)} m² (bloco ${tI})`, ...(nCustom ? [`${nCustom} paredes com bloco/altura próprios`] : []), (Areb > 0 ? `reboco ${fmt(Areb, 1)} m²` : 'sem reboco')];
 
   // 3b. Muro de vedação (paredes marcadas como muro)
   const muros = G.flatMap(x => x.g.muro || []);
@@ -600,13 +606,15 @@ function calc(p) {
     np += ends.length || muros.length + 1; // pilaretes intermédios + um em cada ponta/canto (cantos partilhados contam uma vez)
     Object.entries(byB).forEach(([b, A]) => { add(M, 'bloco' + b, A * pm * perd); if (j > 0) addMort(M, A * pf(b) / 100 * Math.max(0, 1 - pm * .08) * JW, nAss); });
     const isoM = (X.fundTipo || 'isolada') !== 'corrida', ms = .6, hA = Lm ? Am / Lm : hD;
-    const Vl = isoM ? np * (ms + .1) ** 2 * pf(X.limpeza) : Lm * pf(X.sapB) * pf(X.limpeza), Vs = isoM ? np * ms * ms * .25 + Lm * pf(X.vfB) * pf(X.vfH) : Lm * pf(X.sapB) * pf(X.sapH), Vp = np * pf(X.pilB) ** 2 * (hA + (isoM ? .6 : pf(X.sapH))), Vc = Lm * pf(X.vigB) * pf(X.vigH);
-    add(M, 'escavacao', isoM ? np * (ms + .2) ** 2 * .8 + Lm * (pf(X.vfB) + .2) * pf(X.vfH) : Lm * pf(X.sapB) * (pf(X.limpeza) + pf(X.sapH) + .2));
+    const oPil = ON('muroPil'), oSap = oPil && ON('muroSap'), oViga = ON('muroViga'), oCinta = ON('muroCinta'), npE = oPil ? np : 0; M.opts = ['muroReb', 'muroViga', 'muroSap', 'muroPil', 'muroCinta'];
+    const VsapM = isoM && oSap ? npE * ms * ms * .25 : 0, VvM = isoM && oViga ? Lm * pf(X.vfB) * pf(X.vfH) : 0, VcorM = isoM ? 0 : Lm * pf(X.sapB) * pf(X.sapH);
+    const Vl = isoM ? (oSap ? npE * (ms + .1) ** 2 * pf(X.limpeza) : 0) : Lm * pf(X.sapB) * pf(X.limpeza), Vs = VsapM + VvM + VcorM, Vp = npE * pf(X.pilB) ** 2 * (hA + (isoM ? .6 : pf(X.sapH))), Vc = oCinta ? Lm * pf(X.vigB) * pf(X.vigH) : 0;
+    add(M, 'escavacao', isoM ? (oSap ? npE * (ms + .2) ** 2 * .8 : 0) + Lm * (pf(X.vfB) + .2) * (oViga ? pf(X.vfH) : .2) : Lm * pf(X.sapB) * (pf(X.limpeza) + pf(X.sapH) + .2));
     addConc(M, Vl, tL0); addConc(M, Vs + Vp + Vc, tE0);
     addSteel(M, Vs * pf(X.acoSap) + Vp * pf(X.acoPil) + Vc * pf(X.acoVig));
-    add(M, 'cofragem', np * 4 * pf(X.pilB) * hA + Lm * pf(X.vigH) * 2);
+    add(M, 'cofragem', npE * 4 * pf(X.pilB) * hA + (oCinta ? Lm * pf(X.vigH) * 2 : 0) + (VvM ? Lm * pf(X.vfH) * 2 : 0));
     const fR = X.muroReb === '' || X.muroReb == null ? 2 : pf(X.muroReb); if (fR > 0) addMort(M, fR * Am * pf(X.rebocoE) * 1.1, nReb);
-    M.info = [`${fmt(Lm, 1)} m de muro · ${fmt(Am, 1)} m² (altura média ${fmt(hA, 2)} m)`, `${np} pilaretes · cinta de coroamento ${fmt(Vc, 2)} m³`, (isoM ? `${np} sapatas de pilarete + viga de fundação ${fmt(Vs, 2)} m³` : `sapata corrida ${fmt(Vs, 2)} m³`), (fR > 0 ? `reboco ${fR} ${fR === 1 ? 'face' : 'faces'} ${fmt(fR * Am, 1)} m²` : 'sem reboco')];
+    M.info = [`${fmt(Lm, 1)} m de muro · ${fmt(Am, 1)} m² (altura média ${fmt(hA, 2)} m)`, (npE ? `${npE} pilaretes` : 'sem pilaretes') + (oCinta ? ` · cinta de coroamento ${fmt(Vc, 2)} m³` : ' · sem cinta'), (isoM ? [oSap && npE ? `${npE} sapatas de pilarete` : '', VvM ? `viga de fundação ${fmt(VvM, 2)} m³` : ''].filter(Boolean).join(' + ') || 'sem sapatas nem viga' : `sapata corrida ${fmt(Vs, 2)} m³`), (fR > 0 ? `reboco ${fR} ${fR === 1 ? 'face' : 'faces'} ${fmt(fR * Am, 1)} m²` : 'sem reboco')];
   }
 
   // 4. Cobertura
@@ -626,13 +634,14 @@ function calc(p) {
   let areaT = 0, rod = 0, nwc = 0, ncoz = 0, nporta = 0, jan = 0, nportao = 0;
   G.forEach(({ f, g }) => { areaT += g.area; rod += g.ext + 2 * g.int; g.rooms.forEach(r => { if (r.type === 'wc') nwc++; if (r.type === 'cozinha') ncoz++; });
     f.ops.forEach(o => { const k = (OP_TYPES[o.t] || {}).k, q = pf(o.q); if (k === 'porta') nporta += q; if (k === 'janela') jan += q * pf(o.w) * pf(o.h); if (k === 'portao') nportao += q; }); });
-  const Atinta = Areb + areaT, litros = Atinta * pf(X.tintaDem) / Math.max(1, pf(X.tintaRend));
+  A.opts = ['optPintura', 'optRodape'];
+  const Atinta = ON('optPintura') ? Areb + areaT : 0, litros = Atinta * pf(X.tintaDem) / Math.max(1, pf(X.tintaRend));
   // pisos desenhados (ferramenta Piso) substituem a área dos compartimentos nesse andar
   let pCer = 0, pPave = 0, pMad = 0, pCim = 0, nPz = 0;
   G.forEach(({ f, g }) => { const ps = f.pisos || []; if (!ps.length) { pCer += g.area; return; }
     ps.forEach(pz => { const a = Math.abs(pz.pts.reduce((t, p, i) => { const q = pz.pts[(i + 1) % pz.pts.length]; return t + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2; nPz++;
       if (pz.t === 'pave') pPave += a; else if (pz.t === 'madeira') pMad += a; else if (pz.t === 'cimento') pCim += a; else pCer += a; }); });
-  add(A, 'pavimento', pCer * perd); add(A, 'pave', pPave * perd); add(A, 'flutuante', pMad * perd); if (pCim) addMort(A, pCim * .04, nReb); add(A, 'rodape', rod * perd); add(A, 'tinta', Math.ceil(litros / 20 * 10) / 10);
+  add(A, 'pavimento', pCer * perd); add(A, 'pave', pPave * perd); add(A, 'flutuante', pMad * perd); if (pCim) addMort(A, pCim * .04, nReb); if (ON('optRodape')) add(A, 'rodape', rod * perd); add(A, 'tinta', Math.ceil(litros / 20 * 10) / 10);
   // loiças e bancas: se foram colocadas na planta contam-se os objectos; senão pelos compartimentos
   const objs = G.flatMap(x => x.f.objs || []), nSan = objs.filter(o => o.k === 'sanita').length, nBan = objs.filter(o => o.k === 'banca').length;
   if (nSan) nwc = nSan; if (nBan) ncoz = nBan;
@@ -764,6 +773,7 @@ async function loadImage(file) {
   const f = floor(), wm = 20; f.img = { src, wm, hm: wm * c.height / c.width, op: .5, cal: 0 }; delete IMGS[f.id];
   ED.tool = 'calib'; ED.calib = []; changed(); fitView(); render(); toast('Planta carregada: agora calibre a escala');
 }
+
 
 
 
@@ -2102,6 +2112,12 @@ document.addEventListener('keydown', e => {
 addEventListener('resize', () => { if ($('ed')) drawEd(); });
 
 /* ================= TÉCNICO ================= */
+const OPT_N = { optVigaF: 'Viga de fundação', optMurete: 'Murete', optMassame: 'Massame', optRebExt: 'Reboco exterior', optRebInt: 'Reboco interior', optPintura: 'Pintura', optRodape: 'Rodapé', muroViga: 'Viga de fundação', muroSap: 'Sapatas', muroPil: 'Pilaretes', muroCinta: 'Cinta' };
+function optCtl(keys) {
+  const X = P().params, on = k => X[k] === undefined || X[k] === '' ? true : !!pf(X[k]);
+  return `<div class="optctl">${keys.map(k => k === 'muroReb' ? `<div class="seg mini" data-popt="muroReb"><span>Reboco</span>${[0, 1, 2].map(v => `<button data-v="${v}" aria-pressed="${String(X.muroReb ?? 2) === String(v)}">${v === 0 ? 'Não' : v + (v === 1 ? ' face' : ' faces')}</button>`).join('')}</div>`
+    : `<button class="chip ptog" data-ptog="${k}" aria-pressed="${on(k)}">${on(k) ? '✓' : '✕'} ${OPT_N[k] || k}</button>`).join('')}</div>`;
+}
 function fundCtl(fd) {
   return `<div class="fundctl"><div class="seg" data-popt="fundTipo"><button data-v="isolada" aria-pressed="${fd.iso}">Sapatas isoladas</button><button data-v="corrida" aria-pressed="${!fd.iso}">Sapata corrida</button></div>
     ${fd.iso ? `<div class="sapn"><span>Nº de sapatas</span><button class="iconbtn" data-sapstep="-1" aria-label="Menos">−</button><b>${fd.n}</b><button class="iconbtn" data-sapstep="1" aria-label="Mais">+</button>${pf(P().params.sapN) ? `<button class="chip" data-sapstep="0">auto (${fd.nAuto})</button>` : '<small>uma por pilar</small>'}</div>` : ''}</div>`;
@@ -2116,7 +2132,7 @@ function paramHTML() {
   const X = P().params;
   return `<section class="sec" id="sec-param"><div class="sec-head" style="--i:0"><h2>Dados <em>técnicos</em></h2><p>Ajuste ao seu método de construção</p></div>
   ${PARAM_UI.map(([g, items], gi) => `<div class="card" style="--i:${gi + 1}"><div class="card-title"><i>${String(gi + 1).padStart(2, '0')}</i>${g}</div>
-    <div class="fields">${items.map(([k, n, u, opts]) => opts ? `<label class="field"><span>${n}</span><div class="seg" data-popt="${k}">${opts.map(v => `<button data-v="${v}" aria-pressed="${String(X[k]) === String(v)}">${typeof v === 'number' ? (k === 'argAss' || k === 'argReb' ? '1:' + v : k === 'muroReb' ? v + (v === 1 ? ' face' : ' faces') : v + (u ? ' ' + u : '')) : ({ chapa: 'Chapa', laje: 'Laje', isolada: 'Sapatas isoladas', corrida: 'Sapata corrida' }[v] || v)}</button>`).join('')}</div></label>`
+    <div class="fields">${items.map(([k, n, u, opts]) => opts ? `<label class="field"><span>${n}</span><div class="seg" data-popt="${k}">${opts.map(v => `<button data-v="${v}" aria-pressed="${String(X[k]) === String(v)}">${typeof v === 'number' ? (/^(opt|muroViga|muroCinta|muroPil|muroSap)/.test(k) ? (v ? 'Sim' : 'Não') : k === 'argAss' || k === 'argReb' ? '1:' + v : k === 'muroReb' ? v + (v === 1 ? ' face' : ' faces') : v + (u ? ' ' + u : '')) : ({ chapa: 'Chapa', laje: 'Laje', isolada: 'Sapatas isoladas', corrida: 'Sapata corrida' }[v] || v)}</button>`).join('')}</div></label>`
       : numF(n, X[k], u, `data-pk="${k}" step="any"`, String(PARAMS[k]))).join('')}</div></div>`).join('')}
   ${yieldCard(X)}
   <div class="row noprint" style="--i:9"><button class="btn ghost" data-resetparams>Repor valores padrão</button></div>
@@ -2143,7 +2159,7 @@ function renderOrc() {
   if (!$('orcStages')) return;
   $('orcSub').textContent = `${esc(P().name)} · ${P().floors.length} ${P().floors.length === 1 ? 'piso' : 'pisos'} · ${fmt(R.areaBuilt, 1)} m²`;
   $('orcWarn').innerHTML = R.missing ? `<div class="warnbox">Faltam preços em ${R.missing} ${R.missing === 1 ? 'item' : 'itens'}. As quantidades estão calculadas; <button data-goto="precos">preencher a tabela de preços</button> para ver os custos.</div>` : '';
-  $('orcStages').innerHTML = R.stages.map((s, i) => `<div class="card stage" style="--i:${i + 1}"><div class="stage-h"><h3>${s.name}</h3><b>${fmtFix(s.total, 2)} MT</b></div>${s.fund ? fundCtl(s.fund) : ''}
+  $('orcStages').innerHTML = R.stages.map((s, i) => `<div class="card stage" style="--i:${i + 1}"><div class="stage-h"><h3>${s.name}</h3><b>${fmtFix(s.total, 2)} MT</b></div>${s.fund ? fundCtl(s.fund) : ''}${s.opts ? optCtl(s.opts) : ''}
     <div class="info">${s.info.map(t => `<span>${t}</span>`).join('')}</div>
     <div class="mlist">${s.rows.length ? s.rows.map(r => `<div class="mrow${r.price ? '' : ' nop'}"><span>${r.name}</span><b>${r.price ? fmtFix(r.sub, 2) + ' MT' : 'sem preço'}</b><small>${fmt(r.q, 2)} ${r.unit}${r.price ? ' × ' + fmt(r.price, 2) + ' MT' : ''}</small></div>`).join('') : '<p class="hint">Sem quantidades: desenhe a planta.</p>'}</div></div>`).join('');
   $('orcTot').innerHTML = `<div class="card-title"><i>Σ</i>Total</div>${R.stages.map(s => `<div class="tot"><span>${s.name}</span><b>${fmtFix(s.total, 2)} MT</b></div>`).join('')}
@@ -2217,6 +2233,7 @@ document.addEventListener('click', e => {
   const dl = t.closest('[data-dellroom]'); if (dl) { f.list.rooms = f.list.rooms.filter(r => r.id !== dl.dataset.dellroom); changed(1); render(); return; }
   const ao = t.closest('[data-addop]'); if (ao) { const d = OP_TYPES[ao.dataset.addop]; const o = { id: uid(), t: ao.dataset.addop, w: d.w, h: d.h, q: 1, wall: d.wall }; f.ops.push(o); $('opsList').insertAdjacentHTML('beforeend', opHTML(o)); changed(); buzz(); return; }
   const dop = t.closest('[data-delop]'); if (dop) { f.ops = f.ops.filter(o => o.id !== dop.dataset.delop); dop.closest('[data-op]').remove(); changed(); return; }
+  const pt = t.closest('[data-ptog]'); if (pt) { const k = pt.dataset.ptog, cur = p.params[k] === undefined || p.params[k] === '' ? 1 : pf(p.params[k]); p.params[k] = cur ? 0 : 1; changed(1); buzz(); return; }
   const ss = t.closest('[data-sapstep]'); if (ss) { const d = +ss.dataset.sapstep, cur = R && R.stages[0] && R.stages[0].fund ? R.stages[0].fund.n : 0; p.params.sapN = d === 0 ? '' : Math.max(1, cur + d); changed(1); buzz(); return; }
   const po = t.closest('[data-popt] button'); if (po) { const k = po.parentElement.dataset.popt, v = po.dataset.v; p.params[k] = isNaN(+v) ? v : +v; po.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === po)); changed(); buzz(); return; }
   if (t.closest('[data-resetparams]')) { p.params = { ...PARAMS }; changed(1); render(); toast('Valores padrão repostos'); return; }
