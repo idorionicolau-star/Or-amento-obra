@@ -49,6 +49,7 @@ img{max-width:100%}
 
 
 
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -159,6 +160,7 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 .dimbox{z-index:7;top:58px;left:50%;right:auto;transform:translateX(-50%);border-color:var(--accent)}
 .opsets{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}.opsets span{font:700 10px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;min-width:62px}.opsets .chip{padding:6px 9px;font-size:12px}.opsets .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .seg.ptypes{display:grid;grid-template-columns:1fr 1fr;gap:4px}.seg.ptypes button{min-width:0}
+@media (max-width:480px){.ed-selbar .lbl{display:none}}
 .gpair{border:1px solid var(--line2);border-radius:12px;padding:10px;display:grid;gap:8px;background:rgba(61,220,151,.05)}
 .gp-h{display:flex;align-items:center;justify-content:space-between;gap:6px;font:700 11px var(--mono)}
 .gp-a{color:#3DDC97}.gp-b{color:var(--accent)}
@@ -458,6 +460,7 @@ const imgSrc = f => f.img ? (f.img.src || IMGS[f.id] || null) : null;
 
 /* ================= geometria ================= */
 const U = .05; // precisão das paredes (5 cm)
+const slabArea = r => r.pts ? Math.abs(r.pts.reduce((t, p, i) => { const q = r.pts[(i + 1) % r.pts.length]; return t + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2 : pf(r.w) * pf(r.l);
 function floorGeom(f) {
   if (f.mode === 'lista') {
     const C = pf(f.list.C), L = pf(f.list.L), rooms = f.list.rooms;
@@ -480,7 +483,7 @@ function floorGeom(f) {
   (f.walls || []).forEach(w => { const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1); if (w.type === 'muro') { muro.push({ L, bl: w.bl, h: w.h }); return; } if (w.type === 'ext') ext += L; else int += L; if (pf(w.bl) || pf(w.h)) fw.push({ L, int: w.type === 'int', bl: w.bl, h: w.h }); });
   let area = f.rooms.reduce((t, r) => t + r.w * r.l, 0);
   // só paredes (sem compartimentos): usa as lajes desenhadas ou o rectângulo das paredes exteriores
-  if (!area) { area = (f.slabs || []).reduce((t, r) => t + pf(r.w) * pf(r.l), 0);
+  if (!area) { area = (f.slabs || []).reduce((t, r) => t + slabArea(r), 0);
     if (!area) { const ew = (f.walls || []).filter(w => w.type === 'ext'); if (ew.length) { const xs = ew.flatMap(w => [w.x1, w.x2]), ys = ew.flatMap(w => [w.y1, w.y2]); area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)); } } }
   return { ext, int, fw, muro, area, foot: area, cnt, rooms: f.rooms.map(r => ({ type: r.type, name: r.name, a: r.w * r.l, per: 2 * (r.w + r.l) })) };
 }
@@ -537,7 +540,7 @@ function calc(p) {
     if ((f.beams || []).length) { f.beams.forEach(b => { const L = Math.hypot(b.x2 - b.x1, b.y2 - b.y1); Vvig += L * pf(b.b) * pf(b.h); cof += L * (2 * pf(b.h) + pf(b.b)); }); nDrawn.beam++; }
     else { const Lw = g.ext + g.int; Vvig += Lw * pf(X.vigB) * pf(X.vigH); cof += Lw * pf(X.vigH) * 2; }
     f.ops.forEach(o => { const t = (wtOf(f, o) === 'ext' ? pf(X.blocoExt) : pf(X.blocoInt)) / 100; Vver += pf(o.q) * (pf(o.w) + .3) * t * .15; });
-    if (drawnSlabs) (f.slabs || []).forEach(r => { Alaje += pf(r.w) * pf(r.l); VlajeD += pf(r.w) * pf(r.l) * pf(r.e); });
+    if (drawnSlabs) (f.slabs || []).forEach(r => { const a = slabArea(r); Alaje += a; VlajeD += a * pf(r.e); });
     else if (i >= 1) Alaje += g.foot;
   });
   const top = G[G.length - 1] ? G[G.length - 1].g : { foot: 0, ext: 0 };
@@ -767,6 +770,7 @@ async function loadImage(file) {
 
 
 
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -790,6 +794,7 @@ const TOOL_ICON = {
 };
 const KEYOF = { room: 'rooms', wall: 'walls', beam: 'beams', col: 'cols', slab: 'slabs', op: 'ops', obj: 'objs', guide: 'guides', piso: 'pisos' };
 const PISO_T = { ceramica: { n: 'Cerâmica', c: '#D9CFBF', p: 'pt-cer' }, pave: { n: 'Pavê', c: '#A58E7E', p: 'pt-pave' }, cimento: { n: 'Cimentado', c: '#A9ACA7', p: 'pt-cim' }, madeira: { n: 'Madeira', c: '#B48A5E', p: 'pt-mad' } };
+const slabPts = r => r.pts || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.l], [r.x, r.y + r.l]];
 const polyA = pts => Math.abs(pts.reduce((t, p, i) => { const q = pts[(i + 1) % pts.length]; return t + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 const inPoly = (x, y, pts) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, yi] = pts[i], [xj, yj] = pts[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
 const PLACE_OPS = { porta: 'porta_int', janela: 'janela', portao: 'portao' };
@@ -860,7 +865,7 @@ function snapPoints(f) {
   (f.beams || []).forEach(b => seg(b.x1, b.y1, b.x2, b.y2));
   f.rooms.forEach(r => [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.l], [r.x + r.w, r.y + r.l]].forEach(([x, y]) => pts.push({ x, y, k: 'corner' })));
   (f.cols || []).forEach(c => pts.push({ x: c.x, y: c.y, k: 'end' }));
-  (f.slabs || []).forEach(r => [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.l], [r.x + r.w, r.y + r.l]].forEach(([x, y]) => pts.push({ x, y, k: 'corner' })));
+  (f.slabs || []).forEach(r => slabPts(r).forEach(([x, y]) => pts.push({ x, y, k: 'corner' })));
   (f.pisos || []).forEach(pz => pz.pts.forEach(([x, y]) => pts.push({ x, y, k: 'corner' })));
   // cruzamentos das linhas guia (entre si e com paredes/vigas)
   const gl = f.guides || [];
@@ -1120,6 +1125,7 @@ function opPresets(o) {
   const ch = (a, v, cur) => `<button class="chip" data-opset="${a}:${v}" aria-pressed="${Math.abs(pf(cur) - v) < 1e-3}">${fmt(v, 2)}</button>`;
   return `<div class="opsets"><span>Largura</span>${W.map(v => ch('w', v, o.w)).join('')}</div><div class="opsets"><span>Altura</span>${Hh.map(v => ch('h', v, o.h)).join('')}</div>`;
 }
+function addVBtn() { return `<div class="row"><button class="btn ${ED.addV ? 'primary' : 'ghost'}" data-addv>${ED.addV ? 'Toque na aresta… (cancelar)' : '＋ Adicionar vértice'}</button></div>`; }
 function selPanelHTML() {
   const f = ensureF(floor()), s = ED.sel;
   if (msel()) return groupPanelHTML(f);
@@ -1135,7 +1141,7 @@ function selPanelHTML() {
     return `<div class="selpanel">${head(w.type === 'muro' ? 'Muro' : 'Parede')}${wallTypeSeg(w.type)}
       <div class="fields f3">${numF('Comprimento', +len(w).toFixed(3), 'm', 'data-wl step="0.05"')}${numF('Ângulo', +angd(w).toFixed(1), '°', 'data-wa step="1"')}<div class="field"><span>Espessura</span><div class="num"><input value="${fmt(wT(w) * 100, 0)} cm" disabled></div></div></div>
       ${wallSizeHTML([w])}
-      <p class="hint">O comprimento muda a partir do ponto inicial, mantendo a direcção.</p>${parG('Linha guia paralela à parede')}${tail()}</div>`; }
+      <p class="hint">O comprimento muda a partir do ponto inicial, mantendo a direcção.</p>${addVBtn()}${parG('Linha guia paralela à parede')}${tail()}</div>`; }
   if (s.k === 'guide') { const g = f.guides.find(q => q.id === s.id); if (!g) return '';
     return `<div class="selpanel">${head('Linha guia')}${numF('Ângulo', +(angd(g) % 180).toFixed(1), '°', 'data-wa step="1"')}<div class="gdirs"><button class="btn ghost" data-gset="0">— Horiz.</button><button class="btn ghost" data-gset="90">| Vert.</button><button class="btn ghost" data-gset="45">╲ 45°</button><button class="btn ghost" data-gset="135">╱ 135°</button></div>
       ${gpairHTML(f, g)}${parG('Copiar paralela')}<p class="hint">As paredes encaixam sobre as linhas guia e nos cruzamentos (■). Não entram no orçamento.</p>${tail(false)}</div>`; }
@@ -1144,7 +1150,8 @@ function selPanelHTML() {
   if (s.k === 'col') { const c = f.cols.find(q => q.id === s.id); if (!c) return '';
     return `<div class="selpanel">${head('Pilar')}<div class="fields f3">${numF('Lado', c.b, 'm', 'data-cf="b" step="0.05"')}${numF('X', c.x, 'm', 'data-cf="x" step="0.05"')}${numF('Y', c.y, 'm', 'data-cf="y" step="0.05"')}</div><p class="hint">Altura = pé-direito do piso.</p>${tail()}</div>`; }
   if (s.k === 'slab') { const r = f.slabs.find(q => q.id === s.id); if (!r) return '';
-    return `<div class="selpanel">${head('Laje (tecto deste piso)')}<div class="fields f4">${numF('Largura', r.w, 'm', 'data-sf="w" step="0.05"')}${numF('Comprimento', r.l, 'm', 'data-sf="l" step="0.05"')}${numF('Espessura', r.e, 'm', 'data-sf="e" step="0.01"')}${numF('X', r.x, 'm', 'data-sf="x" step="0.05"')}</div><p class="hint">${fmt(r.w * r.l, 2)} m² · ${fmt(r.w * r.l * r.e, 2)} m³ de betão</p>${tail()}</div>`; }
+    if (r.pts) { const A = polyA(r.pts); return `<div class="selpanel">${head('Laje (tecto deste piso)')}<div class="fields f3">${numF('Espessura', r.e, 'm', 'data-sf="e" step="0.01"')}</div><p class="hint"><b>${fmt(A, 2)} m²</b> · ${fmt(A * pf(r.e), 2)} m³ de betão · ${r.pts.length} vértices. Arraste as bolinhas (vértices) e os quadrados brancos (arestas); toque num quadrado para inserir um vértice.</p>${addVBtn()}${ED.pv != null && r.pts.length > 3 ? '<div class="row"><button class="btn ghost" data-pvdel>Apagar vértice marcado</button></div>' : ''}${tail()}</div>`; }
+    return `<div class="selpanel">${head('Laje (tecto deste piso)')}<div class="fields f4">${numF('Largura', r.w, 'm', 'data-sf="w" step="0.05"')}${numF('Comprimento', r.l, 'm', 'data-sf="l" step="0.05"')}${numF('Espessura', r.e, 'm', 'data-sf="e" step="0.01"')}${numF('X', r.x, 'm', 'data-sf="x" step="0.05"')}</div><p class="hint">${fmt(r.w * r.l, 2)} m² · ${fmt(r.w * r.l * r.e, 2)} m³ de betão</p>${addVBtn()}${tail()}</div>`; }
   if (s.k === 'op') { const o = f.ops.find(q => q.id === s.id); if (!o) return ''; const isWin = (OP_TYPES[o.t] || {}).k === 'janela';
     return `<div class="selpanel">${head((OP_TYPES[o.t] || {}).n || 'Abertura')}
       <div class="fields">${selF('Tipo', o.t, Object.fromEntries(Object.entries(OP_TYPES).map(([k, v]) => [k, v.n])), 'data-sof="t"')}<div class="field"><span>Parede</span><div class="num"><input value="${opWallType(f, o) === 'int' ? 'Interior' : 'Exterior'}" disabled></div></div></div>
@@ -1154,7 +1161,7 @@ function selPanelHTML() {
   if (s.k === 'piso') { const pz = (f.pisos || []).find(q => q.id === s.id); if (!pz) return '';
     return `<div class="selpanel">${head('Piso')}<div class="seg ptypes" data-ptype>${Object.entries(PISO_T).map(([k, v]) => `<button data-v="${k}" aria-pressed="${pz.t === k}">${v.n}</button>`).join('')}</div>
       <p class="hint"><b>${fmt(polyA(pz.pts), 2)} m²</b> · ${pz.pts.length} vértices. Arraste as bolinhas para mover vértices e os quadrados brancos para empurrar a face. Toque num quadrado para inserir um vértice; toque numa bolinha para a marcar.</p>
-      ${ED.pv != null && pz.pts.length > 3 ? '<div class="row"><button class="btn ghost" data-pvdel>Apagar vértice marcado</button></div>' : ''}${tail()}</div>`; }
+      ${addVBtn()}${ED.pv != null && pz.pts.length > 3 ? '<div class="row"><button class="btn ghost" data-pvdel>Apagar vértice marcado</button></div>' : ''}${tail()}</div>`; }
   if (s.k === 'obj') { const o = f.objs.find(q => q.id === s.id); if (!o) return '';
     return `<div class="selpanel">${head(OBJ_LIB[o.k] ? OBJ_LIB[o.k].n : 'Objecto')}<div class="fields f3">${numF('Largura', o.w, 'm', 'data-obf="w" step="0.05"')}${numF('Profundidade', o.d, 'm', 'data-obf="d" step="0.05"')}<div class="field"><span>Rotação</span><button class="btn ghost" data-rot>↻ ${fmt(o.rot || 0, 0)}°</button></div></div>${tail()}</div>`; }
   return '';
@@ -1163,8 +1170,8 @@ function selName(s) { if (!s) return ''; if (s.k === 'obj') { const o = (floor()
 function renderSelBar() { const b = $('edSelBar'); if (!b) return; const s = ED.sel; if (ED.view === '3d' && s && !msel()) { b.hidden = false; b.innerHTML = `<b>${esc(selName(s))}</b><button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; return; } if (ED.multi && !msel() && !ED.pickGuide) { b.hidden = ED.view !== 'plan'; b.innerHTML = `<b style="max-width:none">Toque para juntar à selecção</b><button data-multi aria-pressed="true">Feito</button>`; if (s && ED.view === 'plan') b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="true">＋ Feito</button><button class="dz" data-delsel>🗑</button><button data-selclose>✕</button>`; return; } if (ED.pickGuide) { b.hidden = false; b.innerHTML = '<b style="max-width:none">Toque na 2ª linha guia</b><button data-gpend>✕</button>'; return; } b.hidden = !s || (ED.view !== 'plan' && ED.view !== '3d') || !!ED.draw;
   if (msel() && ED.view === 'plan') b.hidden = false; if (b.hidden) { b.innerHTML = ''; return; }
   if (msel()) { b.innerHTML = `<b>${ED.msel.length} itens</b><button data-multi aria-pressed="${!!ED.multi}" title="Juntar mais por toque">${ED.multi ? 'Feito' : '＋'}</button><button data-dupsel aria-label="Duplicar">⧉</button><button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; return; }
-  b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="${!!ED.multi}" title="Seleccionar vários" aria-label="Seleccionar vários">＋</button>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑 Apagar</button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
-function renderSel() { if (ED.pv != null && (!ED.sel || ED.sel.k !== 'piso')) ED.pv = null; if (ED.msel) { const f0 = ensureF(floor()); ED.msel = ED.msel.filter(q => (f0[KEYOF[q.k]] || []).some(z => z.id === q.id)); if (ED.msel.length < 2) ED.msel = null; } if (ED.dimEdit && !ED.sel) closeDimEdit(); if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
+  b.innerHTML = `<b>${esc(selName(s))}</b><button data-multi aria-pressed="${!!ED.multi}" title="Seleccionar vários" aria-label="Seleccionar vários">＋</button>${s.k === 'obj' ? '<button data-rot aria-label="Rodar 90°">↻</button>' : ''}${s.k !== 'op' ? '<button data-dupsel aria-label="Duplicar">⧉</button>' : ''}${['wall', 'slab', 'piso'].includes(s.k) ? `<button data-addv aria-pressed="${!!ED.addV}" title="Adicionar vértice">＋◆</button>` : ''}<button data-seledit>Editar</button><button class="dz" data-delsel>🗑<span class="lbl"> Apagar</span></button><button data-selclose aria-label="Desseleccionar">✕</button>`; }
+function renderSel() { if (ED.addV && (!ED.sel || !['wall', 'slab', 'piso'].includes(ED.sel.k))) ED.addV = false; if (ED.pv != null && (!ED.sel || !(selObj() || {}).pts)) ED.pv = null; if (ED.msel) { const f0 = ensureF(floor()); ED.msel = ED.msel.filter(q => (f0[KEYOF[q.k]] || []).some(z => z.id === q.id)); if (ED.msel.length < 2) ED.msel = null; } if (ED.dimEdit && !ED.sel) closeDimEdit(); if (ED.gpair && (!ED.sel || ED.sel.k !== 'guide' || ED.sel.id !== ED.gpair.b)) ED.gpair = null; if (ED.pickGuide && (!ED.sel || ED.sel.k !== 'guide')) ED.pickGuide = false; const el = $('selPanel'); if (el) el.innerHTML = selPanelHTML(); renderSelBar(); }
 function objPicker() {
   const m = $('modal'); m.hidden = false;
   m.innerHTML = `<div class="card"><div class="card-title">Biblioteca de objectos</div>${libHTML()}<button class="btn ghost" data-libclose>Cancelar</button></div>`;
@@ -1212,7 +1219,7 @@ function contentPts(f) {
   const pts = [];
   f.rooms.forEach(r => pts.push([r.x, r.y], [r.x + r.w, r.y + r.l]));
   (f.walls || []).concat(f.beams || []).forEach(w => pts.push([w.x1, w.y1], [w.x2, w.y2]));
-  (f.slabs || []).forEach(r => pts.push([r.x, r.y], [r.x + r.w, r.y + r.l]));
+  (f.slabs || []).forEach(r => pts.push(...slabPts(r)));
   (f.objs || []).concat(f.cols || []).forEach(o => pts.push([o.x, o.y]));
   if (f.img && imgSrc(f) && f.imgMode) pts.push([0, 0], [f.img.wm, f.img.hm]);
   return pts;
@@ -1247,7 +1254,7 @@ function drawEd() {
   // piso de baixo em fantasma (ajuda a alinhar)
   const below = P().floors[FL - 1];
   if (below && below.mode !== 'lista') segsOf(below).forEach(l => { s += `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="rgba(255,255,255,.12)" stroke-width="${wallT(l.int)}" stroke-linecap="square" pointer-events="none"/>`; });
-  (f.slabs || []).forEach(r => { s += `<rect data-slab="${r.id}" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.l}" fill="url(#hatch)" stroke="${isSel('slab', r.id) ? '#5EC8E5' : 'rgba(94,200,229,.5)'}" stroke-width="1.5" stroke-dasharray="8 4" vector-effect="non-scaling-stroke"/>`; });
+  (f.slabs || []).forEach(r => { s += `<polygon data-slab="${r.id}" points="${slabPts(r).map(p => p.join(',')).join(' ')}" fill="url(#hatch)" stroke="${isSel('slab', r.id) ? '#5EC8E5' : 'rgba(94,200,229,.5)'}" stroke-width="1.5" stroke-dasharray="8 4" vector-effect="non-scaling-stroke"/>`; });
   f.rooms.forEach(r => { s += `<rect data-room="${r.id}" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.l}" fill="${TYPE_FILL[r.type] || TYPE_FILL.outro}"/>`; });
   (f.pisos || []).forEach(pz => { const T = PISO_T[pz.t] || PISO_T.ceramica, sel = isSel('piso', pz.id); s += `<polygon points="${pz.pts.map(p => p.join(',')).join(' ')}" fill="${T.c}" fill-opacity=".55" stroke="${sel ? '#5EC8E5' : T.c}" stroke-width="${sel ? 2.5 : 1.2}" vector-effect="non-scaling-stroke" pointer-events="none"/><polygon points="${pz.pts.map(p => p.join(',')).join(' ')}" fill="url(#${T.p})" pointer-events="none"/>`; });
   (f.objs || []).forEach(o => { s += `<g data-obj="${o.id}" transform="translate(${o.x} ${o.y}) rotate(${o.rot || 0})">${objSym(o.k, pf(o.w), pf(o.d))}${isSel('obj', o.id) ? `<rect x="${-pf(o.w) / 2 - .05}" y="${-pf(o.d) / 2 - .05}" width="${pf(o.w) + .1}" height="${pf(o.d) + .1}" fill="none" stroke="#5EC8E5" stroke-width="2" stroke-dasharray="5 3" vector-effect="non-scaling-stroke"/>` : ''}</g>`; });
@@ -1271,11 +1278,12 @@ function drawEd() {
   // pegas da selecção
   const H = (id, x, y) => `<circle data-handle="${id}" cx="${x}" cy="${y}" r="${G / 34}" fill="#5EC8E5" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
   if (ED.sel && !msel()) { const q = selObj();
-    if (q && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    if (q && q.pts && ED.sel.k === 'slab') s += `<polygon points="${q.pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+    if (q && !q.pts && (ED.sel.k === 'room' || ED.sel.k === 'slab')) s += `<rect x="${q.x}" y="${q.y}" width="${q.w}" height="${q.l}" fill="none" stroke="#5EC8E5" stroke-width="2.5" stroke-dasharray="6 4" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
     if (q) { const k = ED.sel.k, hl = handleList(k, q), gz = hl.filter(h => GZ_DIR[h[0]]), c = gz.length ? selCenter(k, q) : null, gcol = { gx: '#FF6B6B', gy: '#3DDC97', gd: '#FFB23F', ge: '#FFB23F' };
       if (c) { gz.forEach(([id, hx, hy]) => { s += `<line x1="${c[0]}" y1="${c[1]}" x2="${hx}" y2="${hy}" stroke="${gcol[id]}" stroke-width="2.5" vector-effect="non-scaling-stroke" pointer-events="none"/><circle cx="${hx}" cy="${hy}" r="${G / 55}" fill="${gcol[id]}" stroke="#0A0D0C" stroke-width="1.5" vector-effect="non-scaling-stroke" pointer-events="none"/>`; });
         s += `<rect x="${c[0] - G / 110}" y="${c[1] - G / 110}" width="${G / 55}" height="${G / 55}" fill="#fff" stroke="#0A0D0C" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>`; }
-      hl.filter(h => !GZ_DIR[h[0]]).forEach(([id, hx, hy]) => { const edge = id[0] === 'e' || id === 'wf', act = k === 'piso' && id === 'v' + ED.pv;
+      hl.filter(h => !GZ_DIR[h[0]]).forEach(([id, hx, hy]) => { const edge = id[0] === 'e' || id === 'wf', act = !!q.pts && id === 'v' + ED.pv;
         s += edge ? `<rect x="${hx - G / 90}" y="${hy - G / 90}" width="${G / 45}" height="${G / 45}" rx="${G / 300}" fill="#fff" stroke="#5EC8E5" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>` : `<circle cx="${hx}" cy="${hy}" r="${G / 40}" fill="${act ? '#FF7A1A' : '#5EC8E5'}" stroke="#0A0D0C" stroke-width="2" vector-effect="non-scaling-stroke" pointer-events="none"/>`; }); } }
   if (ED.sel && !msel() && !ED.gpair && !ED.draw) s += dimsSVG(f, fs); else ED.dims = null;
   if (ED.gpair) { const A = (f.guides || []).find(q => q.id === ED.gpair.a), Bq = (f.guides || []).find(q => q.id === ED.gpair.b);
@@ -1338,6 +1346,7 @@ function elBox(k, q, f) {
   if (k === 'guide') { if (Math.abs(q.y2 - q.y1) < 1e-6) return { x0: -I, x1: I, y0: q.y1, y1: q.y1, inf: 'h' }; if (Math.abs(q.x2 - q.x1) < 1e-6) return { x0: q.x1, x1: q.x1, y0: -I, y1: I, inf: 'v' }; return null; }
   if (k === 'obj') { const a = (q.rot || 0) * Math.PI / 180, hw = pf(q.w) / 2, hd = pf(q.d) / 2, ex = Math.abs(Math.cos(a)) * hw + Math.abs(Math.sin(a)) * hd, ey = Math.abs(Math.sin(a)) * hw + Math.abs(Math.cos(a)) * hd; return { x0: q.x - ex, x1: q.x + ex, y0: q.y - ey, y1: q.y + ey }; }
   if (k === 'col') { const b = pf(q.b) / 2; return { x0: q.x - b, x1: q.x + b, y0: q.y - b, y1: q.y + b }; }
+  if (q.pts) { const xs = q.pts.map(p => p[0]), ys = q.pts.map(p => p[1]); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }; }
   if (k === 'room' || k === 'slab') return { x0: q.x, x1: q.x + q.w, y0: q.y, y1: q.y + q.l };
   if (k === 'piso') { const xs = q.pts.map(p => p[0]), ys = q.pts.map(p => p[1]); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }; }
   return null;
@@ -1447,11 +1456,11 @@ function refreshSum() { const el = document.querySelector('.ws-sum'); if (!el) r
 function buildFaces(forElev) {
   const p = P(), faces = [];
   const quad = (pts, n, fill, extra) => faces.push({ pts, n, fill, alpha: 1, ...extra });
-  const box = (c, z0, z1, col, top, extra) => { // c = 4 cantos no plano (sentido qualquer)
+  const box = (c, z0, z1, col, top, extra) => { // c = cantos do polígono no plano (sentido qualquer)
     quad(c.map(q => [q[0], q[1], z1]), [0, 0, 1], top || col, extra);
-    for (let i = 0; i < 4; i++) { const j = (i + 1) % 4, ex = c[j][0] - c[i][0], ey = c[j][1] - c[i][1], ln = Math.hypot(ex, ey) || 1;
-      let nx = ey / ln, ny = -ex / ln; const mx = (c[i][0] + c[j][0]) / 2, my = (c[i][1] + c[j][1]) / 2, cx = (c[0][0] + c[2][0]) / 2, cy = (c[0][1] + c[2][1]) / 2;
-      if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }
+    const n = c.length, sa = c.reduce((t, p, i) => { const q = c[(i + 1) % n]; return t + p[0] * q[1] - q[0] * p[1]; }, 0) > 0 ? 1 : -1;
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n, ex = c[j][0] - c[i][0], ey = c[j][1] - c[i][1], ln = Math.hypot(ex, ey) || 1; if (ln < 1e-6) continue;
+      const nx = sa * ey / ln, ny = -sa * ex / ln;
       quad([[c[i][0], c[i][1], z0], [c[j][0], c[j][1], z0], [c[j][0], c[j][1], z1], [c[i][0], c[i][1], z1]], [nx, ny, 0], col, extra && extra.hk ? { ...extra, hk: i === 0 ? extra.hk + ':1' : i === 2 ? extra.hk + ':-1' : undefined } : extra); }
   };
   let z0 = 0;
@@ -1476,7 +1485,7 @@ function buildFaces(forElev) {
     (f.cols || []).forEach(c => { const b = pf(c.b) / 2; box([[c.x - b, c.y - b], [c.x + b, c.y - b], [c.x + b, c.y + b], [c.x - b, c.y + b]], z0, z0 + H0, '#8E9692', '#A3AAA6', { ...ex, src: { k: 'col', id: c.id, fi } }); });
     (f.beams || []).forEach(bm => { const L = Math.hypot(bm.x2 - bm.x1, bm.y2 - bm.y1); if (L < 1e-3) return; const ux = (bm.x2 - bm.x1) / L, uy = (bm.y2 - bm.y1) / L, nx = -uy, ny = ux, t = pf(bm.b) / 2;
       box([[bm.x1 + nx * t, bm.y1 + ny * t], [bm.x2 + nx * t, bm.y2 + ny * t], [bm.x2 - nx * t, bm.y2 - ny * t], [bm.x1 - nx * t, bm.y1 - ny * t]], z0 + H0 - pf(bm.h), z0 + H0 + .005, '#9C7A55', '#B08B62', { ...ex, src: { k: 'beam', id: bm.id, fi } }); });
-    (f.slabs || []).forEach(r => box([[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.l], [r.x, r.y + r.l]], z0 + H0, z0 + H0 + pf(r.e), '#98A09C', '#B9C0BC', { ...ex, alpha: forElev ? 1 : (fi >= FL ? .55 : 1), src: { k: 'slab', id: r.id, fi } }));
+    (f.slabs || []).forEach(r => box(slabPts(r), z0 + H0, z0 + H0 + pf(r.e), '#98A09C', '#B9C0BC', { ...ex, alpha: forElev ? 1 : (fi >= FL ? .55 : 1), src: { k: 'slab', id: r.id, fi } }));
     (f.objs || []).forEach(ob => { const L0 = OBJ_LIB[ob.k] || { h: .5 }, a = (ob.rot || 0) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), hw = pf(ob.w) / 2, hd = pf(ob.d) / 2;
       box([[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([x, y]) => [ob.x + x * ca - y * sa, ob.y + x * sa + y * ca]), z0, z0 + L0.h, '#6F868D', '#8FA8B0', { ...ex, src: { k: 'obj', id: ob.id, fi } }); });
     z0 += H0 + ((f.slabs || []).length ? Math.max(...f.slabs.map(r => pf(r.e))) : (fi < p.floors.length - 1 ? pf(p.params.lajeE) : 0));
@@ -1586,17 +1595,17 @@ function hitAll(f, x, y, tol) {
   (f.guides || []).forEach(g => { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L = Math.hypot(dx, dy); if (L < 1e-9) return; add('guide', g.id, Math.abs((x - g.x1) * dy - (y - g.y1) * dx) / L, 2.5); });
   (f.pisos || []).forEach(pz => { let d = inPoly(x, y, pz.pts) ? 0 : Infinity; pz.pts.forEach((p, i) => { const q = pz.pts[(i + 1) % pz.pts.length]; d = Math.min(d, segD(p[0], p[1], q[0], q[1])); }); add('piso', pz.id, d, 3.4); });
   f.rooms.forEach(r => add('room', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 3));
-  (f.slabs || []).forEach(r => add('slab', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 4));
+  (f.slabs || []).forEach(r => { if (!r.pts) { add('slab', r.id, boxD(r.x + r.w / 2, r.y + r.l / 2, r.w, r.l, 0), 4); return; } let d = inPoly(x, y, r.pts) ? 0 : Infinity; r.pts.forEach((p, i) => { const q = r.pts[(i + 1) % r.pts.length]; d = Math.min(d, segD(p[0], p[1], q[0], q[1])); }); add('slab', r.id, d, 4); });
   return out.sort((a, b) => a.pr - b.pr || a.d - b.d);
 }
 const GZ_DIR = { gx: [1, 0], gy: [0, 1], gd: [Math.SQRT1_2, Math.SQRT1_2], ge: [Math.SQRT1_2, -Math.SQRT1_2] };
-function selCenter(k, q) { if (k === 'room' || k === 'slab') return [q.x + q.w / 2, q.y + q.l / 2]; if (q.pts) { const b = elBox('piso', q); return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; } if ('x1' in q) return [(q.x1 + q.x2) / 2, (q.y1 + q.y2) / 2]; return [q.x, q.y]; }
+function selCenter(k, q) { if ((k === 'room' || k === 'slab') && !q.pts) return [q.x + q.w / 2, q.y + q.l / 2]; if (q.pts) { const b = elBox('piso', q); return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; } if ('x1' in q) return [(q.x1 + q.x2) / 2, (q.y1 + q.y2) / 2]; return [q.x, q.y]; }
 function handleList(k, q) {
   const hs = [], mpp = ED.G / edBox().w;
   if (k === 'wall' || k === 'beam' || k === 'guide') { hs.push(['p1', q.x1, q.y1], ['p2', q.x2, q.y2]);
     if (k === 'wall') { const L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 1, nx = -(q.y2 - q.y1) / L, ny = (q.x2 - q.x1) / L, off = wT(q) / 2 + mpp * 22; hs.push(['wf', (q.x1 + q.x2) / 2 + nx * off, (q.y1 + q.y2) / 2 + ny * off]); } }
-  if (k === 'room' || k === 'slab') { const { x, y, w, l } = q; hs.push(['c0', x, y], ['c1', x + w, y], ['c2', x + w, y + l], ['c3', x, y + l], ['eN', x + w / 2, y], ['eE', x + w, y + l / 2], ['eS', x + w / 2, y + l], ['eW', x, y + l / 2]); }
-  if (k === 'piso') q.pts.forEach((p, i) => { const n = q.pts[(i + 1) % q.pts.length]; hs.push(['v' + i, p[0], p[1]], ['e' + i, (p[0] + n[0]) / 2, (p[1] + n[1]) / 2]); });
+  if ((k === 'room' || k === 'slab') && !q.pts) { const { x, y, w, l } = q; hs.push(['c0', x, y], ['c1', x + w, y], ['c2', x + w, y + l], ['c3', x, y + l], ['eN', x + w / 2, y], ['eE', x + w, y + l / 2], ['eS', x + w / 2, y + l], ['eW', x, y + l / 2]); }
+  if (q.pts) q.pts.forEach((p, i) => { const n = q.pts[(i + 1) % q.pts.length]; hs.push(['v' + i, p[0], p[1]], ['e' + i, (p[0] + n[0]) / 2, (p[1] + n[1]) / 2]); });
   if (k === 'op' && q.x != null) { const oa = q.ang || 0, ow = pf(q.w) / 2; hs.push(['o1', q.x - Math.cos(oa) * ow, q.y - Math.sin(oa) * ow], ['o2', q.x + Math.cos(oa) * ow, q.y + Math.sin(oa) * ow]); }
   if (['obj', 'col', 'room', 'slab', 'piso', 'beam'].includes(k)) { const c = selCenter(k, q), bx = ['room', 'slab', 'piso'].includes(k) ? elBox(k, q) : null, L = bx ? Math.max(mpp * 30, Math.min(mpp * 58, .38 * Math.min(bx.x1 - bx.x0, bx.y1 - bx.y0))) : mpp * 58; Object.entries(GZ_DIR).forEach(([id, [ux, uy]]) => hs.push([id, c[0] + ux * L * (id[1] === 'd' || id[1] === 'e' ? .8 : 1), c[1] + uy * L * (id[1] === 'd' || id[1] === 'e' ? .8 : 1)])); }
   return hs;
@@ -1671,9 +1680,20 @@ function pick3D(cx, cy) {
   ED.msel = null; ED.sel = { k, id }; renderSel(); drawEd(); buzz(); if (ED.ws && innerWidth <= 1000) $('ws').classList.add('show-right');
 }
 function fillPiso(f, x, y) {
-  const r = f.rooms.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.l) || (f.slabs || []).find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.l);
-  if (!r) return false; const pz = { id: uid(), t: ED.pisoType, pts: [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.l], [r.x, r.y + r.l]] };
+  const r = f.rooms.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.l) || (f.slabs || []).find(q => inPoly(x, y, slabPts(q)));
+  if (!r) return false; const pz = { id: uid(), t: ED.pisoType, pts: JSON.parse(JSON.stringify(slabPts(r))) };
   f.pisos.push(pz); ED.sel = { k: 'piso', id: pz.id }; buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum(); toast(`Piso ${fmt(polyA(pz.pts), 1)} m²`); return true;
+}
+function addVertexAt(f, x, y, tol) {
+  const s2 = ED.sel, q = selObj(); if (!s2 || !q) return false;
+  const proj = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1e-9, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L2)); return { t, p: [a[0] + dx * t, a[1] + dy * t], d: Math.hypot(a[0] + dx * t - x, a[1] + dy * t - y) }; };
+  if (s2.k === 'wall') { const r = proj([q.x1, q.y1], [q.x2, q.y2]); if (r.d > tol || r.t < .02 || r.t > .98) return false;
+    const P2 = [+r.p[0].toFixed(3), +r.p[1].toFixed(3)], nw = { ...JSON.parse(JSON.stringify(q)), id: uid(), x1: P2[0], y1: P2[1] }; q.x2 = P2[0]; q.y2 = P2[1]; f.walls.push(nw);
+    ED.vsel = { x: P2[0], y: P2[1] }; return 'wall'; }
+  if (s2.k === 'slab' && !q.pts) { q.pts = slabPts(q).map(p => p.slice()); }
+  if (!q.pts) return false;
+  let best = null; q.pts.forEach((a, i) => { const r = proj(a, q.pts[(i + 1) % q.pts.length]); if (r.d <= tol && (!best || r.d < best.d)) best = { ...r, i }; });
+  if (!best) return false; q.pts.splice(best.i + 1, 0, [+best.p[0].toFixed(3), +best.p[1].toFixed(3)]); ED.pv = best.i + 1; return 'poly';
 }
 let _hintT = 0; const hintOnce = m => { if (Date.now() - _hintT > 2500) { _hintT = Date.now(); toast(m); } };
 function bindEditor() {
@@ -1695,6 +1715,9 @@ function bindEditor() {
     ED.lp = touch && ED.view === 'plan' ? { cx: e.clientX, cy: e.clientY } : null;
     if (ED.view !== 'plan') { ED.drag = { kind: 'orbit', cx: e.clientX, cy: e.clientY, sx: e.clientX, sy: e.clientY }; return; }
     const [x, y] = edPt(e), f = ensureF(floor()), mpp = ED.G / edBox().w, tol = mpp * (touch ? 26 : 10);
+    if (ED.addV && ED.sel && ED.view === 'plan') { const res = addVertexAt(f, x, y, tol * 1.4); ED.addV = false;
+      if (res) { buzz(); changed(); renderSel(); drawEd(); if (ED.ws) refreshSum(); toast(res === 'wall' ? 'Parede dividida — arraste o vértice laranja' : 'Vértice inserido — arraste-o'); return; }
+      toast('Vértice cancelado'); renderSel(); drawEd(); return; }
     const dl = ED.tool === 'mover' && e.target.closest && e.target.closest('[data-dim]'); if (dl && ED.sel && !ED.draw) { openDimEdit(dl.dataset.dim); return; }
     if (ED.tool === 'calib') { ED.calib.push([x, y]); if (ED.calib.length === 2) askCalib(); drawEd(); return; }
     if (ED.tool === 'area') { ED.drag = { kind: 'marq', x0: x, y0: y, x1: x, y1: y, cx: e.clientX, cy: e.clientY, add: e.shiftKey || ED.multi }; return; }
@@ -1794,12 +1817,12 @@ function bindEditor() {
       if (GZ_DIR[d.which]) { const [ux, uy] = GZ_DIR[d.which], t = r5((x - d.x0) * ux + (y - d.y0) * uy); trFrom(q, o, +(ux * t).toFixed(3), +(uy * t).toFixed(3)); d.snap = null; drawEd(); return; }
       if (d.which === 'wf') { const L = Math.hypot(o.x2 - o.x1, o.y2 - o.y1) || 1, nx = -(o.y2 - o.y1) / L, ny = (o.x2 - o.x1) / L, t = r5((x - d.x0) * nx + (y - d.y0) * ny);
         trFrom(q, o, +(nx * t).toFixed(3), +(ny * t).toFixed(3)); d.refs.forEach(r => { r.w['x' + r.e] = r.at === 1 ? q.x1 : q.x2; r.w['y' + r.e] = r.at === 1 ? q.y1 : q.y2; }); drawEd(); return; }
-      if (/^[ce]/.test(d.which) && (ED.sel.k === 'room' || ED.sel.k === 'slab')) { const sn = snapAt(d.fx, x, y), w = d.which; let X0 = o.x, X1 = o.x + o.w, Y0 = o.y, Y1 = o.y + o.l;
+      if (/^[ce]/.test(d.which) && !q.pts && (ED.sel.k === 'room' || ED.sel.k === 'slab')) { const sn = snapAt(d.fx, x, y), w = d.which; let X0 = o.x, X1 = o.x + o.w, Y0 = o.y, Y1 = o.y + o.l;
         if (w === 'c0' || w === 'c3' || w === 'eW') X0 = Math.min(sn.x, X1 - .3); if (w === 'c1' || w === 'c2' || w === 'eE') X1 = Math.max(sn.x, X0 + .3);
         if (w === 'c0' || w === 'c1' || w === 'eN') Y0 = Math.min(sn.y, Y1 - .3); if (w === 'c2' || w === 'c3' || w === 'eS') Y1 = Math.max(sn.y, Y0 + .3);
         Object.assign(q, { x: +X0.toFixed(3), y: +Y0.toFixed(3), w: +(X1 - X0).toFixed(3), l: +(Y1 - Y0).toFixed(3) }); d.snap = sn; drawEd(); return; }
-      if (ED.sel.k === 'piso' && /^v\d/.test(d.which)) { const i = +d.which.slice(1), sn = snapAt(d.fx, x, y); q.pts[i] = [sn.x, sn.y]; d.snap = sn; drawEd(); return; }
-      if (ED.sel.k === 'piso' && /^e\d/.test(d.which)) { const i = +d.which.slice(1), n = o.pts.length, a = o.pts[i], b = o.pts[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, t = r5((x - d.x0) * nx + (y - d.y0) * ny);
+      if (q.pts && /^v\d/.test(d.which)) { const i = +d.which.slice(1), sn = snapAt(d.fx, x, y); q.pts[i] = [sn.x, sn.y]; d.snap = sn; drawEd(); return; }
+      if (q.pts && /^e\d/.test(d.which)) { const i = +d.which.slice(1), n = o.pts.length, a = o.pts[i], b = o.pts[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, t = r5((x - d.x0) * nx + (y - d.y0) * ny);
         q.pts = o.pts.map((p, j) => j === i || j === (i + 1) % n ? [+(p[0] + nx * t).toFixed(3), +(p[1] + ny * t).toFixed(3)] : p.slice()); drawEd(); return; }
       else { const i = d.which === 'p1' ? 1 : 2, j = 3 - i, sn = snapAt(d.fx, x, y, [q['x' + j], q['y' + j]]); q['x' + i] = sn.x; q['y' + i] = sn.y; d.snap = sn; (d.refs || []).forEach(r => { r.w['x' + r.e] = sn.x; r.w['y' + r.e] = sn.y; }); }
       drawEd();
@@ -1827,7 +1850,7 @@ function bindEditor() {
       const n = marqSelect(f2, d, d.add); if (ED.tool === 'area') setTool('mover'); renderSel(); drawEd(); if (n) { buzz(); toast(n === 1 ? '1 elemento seleccionado' : `${n} elementos seleccionados`); if (ED.ws && n > 1 && innerWidth <= 1000) {} } return; }
     if (d.kind === 'pan' && d.empty && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 8) { if (ED.sel || ED.msel) { ED.sel = null; ED.msel = null; renderSel(); drawEd(); } return; }
     if (d.kind === 'move' && !d.started) return;
-    if (d.kind === 'handle' && !d.started && ED.sel && ED.sel.k === 'piso') { const q = selObj();
+    if (d.kind === 'handle' && !d.started && ED.sel && selObj() && selObj().pts) { const q = selObj();
       if (/^v\d/.test(d.which)) { ED.pv = ED.pv === +d.which.slice(1) ? null : +d.which.slice(1); renderSel(); drawEd(); return; }
       if (/^e\d/.test(d.which)) { const i = +d.which.slice(1), a = q.pts[i], b = q.pts[(i + 1) % q.pts.length]; q.pts.splice(i + 1, 0, [+((a[0] + b[0]) / 2).toFixed(3), +((a[1] + b[1]) / 2).toFixed(3)]); ED.pv = i + 1; renderSel(); drawEd(); changed(); toast('Vértice inserido — arraste-o'); return; } }
     if ((d.kind === 'move' || d.kind === 'handle') && d.started) { changed(); renderSel(); if (d.k === 'op' || d.grp) refreshOps(); if (ED.ws) refreshSum(); drawEd(); }
@@ -1876,8 +1899,9 @@ document.addEventListener('click', e => {
   if (t.closest('[data-gapply]') && ED.gpair) { const i = document.querySelector('[data-gdist]'); applyGDist(pf(i && i.value)); drawEd(); changed(); toast('Distância aplicada'); return; }
   if (t.closest('[data-gpend]')) { ED.gpair = null; ED.pickGuide = false; renderSel(); drawEd(); return; }
   const ops2 = t.closest('[data-opset]'); if (ops2 && ED.sel && ED.sel.k === 'op') { const o = selObj(), [a, v] = ops2.dataset.opset.split(':'); o[a] = +v; if (a === 'w') snapOp(f, o, o.x, o.y, 1); renderSel(); refreshOps(); drawEd(); changed(); if (ED.ws) refreshSum(); buzz(); return; }
+  if (t.closest('[data-addv]') && ED.sel) { ED.addV = !ED.addV; if (ED.addV && ED.tool !== 'mover') { const k2 = ED.sel; setTool('mover'); ED.sel = k2; } renderSel(); drawEd(); if (ED.addV) { toast('Toque na aresta onde quer o novo vértice'); if (ED.ws) $('ws').classList.remove('show-right'); } return; }
   const pty = t.closest('[data-ptype] button'); if (pty) { ED.pisoType = pty.dataset.v; selItems(f).filter(x2 => x2.s.k === 'piso').forEach(({ q }) => { q.t = pty.dataset.v; }); renderSel(); drawEd(); changed(); if (ED.ws) refreshSum(); buzz(); return; }
-  if (t.closest('[data-pvdel]') && ED.sel && ED.sel.k === 'piso') { const q = selObj(); if (q.pts.length > 3 && ED.pv != null) { q.pts.splice(ED.pv, 1); ED.pv = null; renderSel(); drawEd(); changed(); } return; }
+  if (t.closest('[data-pvdel]') && ED.sel && selObj() && selObj().pts) { const q = selObj(); if (q.pts.length > 3 && ED.pv != null) { q.pts.splice(ED.pv, 1); ED.pv = null; renderSel(); drawEd(); changed(); } return; }
   const gset = t.closest('[data-gset]'); if (gset && ED.sel) { const q = selObj(), a = +gset.dataset.gset * Math.PI / 180, L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 5; q.x2 = +(q.x1 + Math.cos(a) * L).toFixed(3); q.y2 = +(q.y1 + Math.sin(a) * L).toFixed(3); renderSel(); drawEd(); changed(); return; }
   const gp = t.closest('[data-gpar]'); if (gp && ED.sel) { const q = selObj(), D = pf($('gparD') && $('gparD').value); if (!(D > 0)) { toast('Escreva a distância'); return; } ED.gparD = D;
     const L = Math.hypot(q.x2 - q.x1, q.y2 - q.y1) || 1, sg = +gp.dataset.gpar, nx = -(q.y2 - q.y1) / L * D * sg, ny = (q.x2 - q.x1) / L * D * sg, fl = ensureF(floor());
