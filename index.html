@@ -44,6 +44,7 @@ img{max-width:100%}
 
 
 
+
 :root{
   color-scheme:dark;
   --bg:#0A0D0C; --bg2:#0F1413; --surface:#141A18; --surface2:#1A2220; --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
@@ -332,6 +333,8 @@ body.wsmode .tabbar{display:none}
   .ws-left,.ws-right{position:absolute;top:0;bottom:0;z-index:5;width:min(300px,86vw);transform:translateX(-105%);transition:transform .3s var(--ease);box-shadow:0 0 40px rgba(0,0,0,.7)}
   .ws-left{left:0}.ws-right{right:0;transform:translateX(105%)}
   .ws.show-left .ws-left,.ws.show-right .ws-right{transform:none}
+  .ws-left,.ws-right{touch-action:pan-y}
+  .ws-center{position:relative}.ws.show-left .ws-center::after,.ws.show-right .ws-center::after{content:'';position:absolute;inset:0;z-index:4;background:rgba(0,0,0,.35)}
   .ws-body{position:relative}
   .ws-pbtn{display:inline-flex}
   .ws-top{flex-wrap:wrap}.ws-top .vtabs{order:3;flex-basis:100%}
@@ -749,6 +752,7 @@ async function loadImage(file) {
 
 
 
+
 /* ================= EDITOR TIPO ARCHICAD (v2) ================= */
 const OBJ_LIB = {
   cama2: { n: 'Cama casal', w: 1.6, d: 2.0, h: .5 }, cama1: { n: 'Cama solteiro', w: .9, d: 1.9, h: .5 }, roupeiro: { n: 'Roupeiro', w: 1.8, d: .6, h: 2.1 },
@@ -960,6 +964,25 @@ document.addEventListener('pointerdown', e => {
   addEventListener('pointermove', mv); addEventListener('pointerup', upf); addEventListener('pointercancel', upf);
 }, true);
 addEventListener('resize', () => placeFavBar());
+
+/* ---------- gavetas laterais (telemóvel): fechar arrastando ou tocando fora ---------- */
+(() => {
+  let st = null;
+  const openSide = ws => ws.classList.contains('show-left') ? 'left' : ws.classList.contains('show-right') ? 'right' : null;
+  document.addEventListener('pointerdown', e => {
+    const ws = $('ws'); if (!ws || ws.hidden || innerWidth > 1000) return; const side = openSide(ws); if (!side) return;
+    if (!e.target.closest('.ws-' + side)) { if (e.target.closest('.ws-center')) { e.preventDefault(); e.stopPropagation(); ws.classList.remove('show-' + side); } return; }
+    if (e.pointerType === 'mouse') return;
+    const dr = ws.querySelector('.ws-' + side); st = { side, dr, x: e.clientX, y: e.clientY, t: Date.now(), on: false, w: dr.offsetWidth, dx: 0 };
+  }, true);
+  document.addEventListener('pointermove', e => { if (!st) return; const dx = e.clientX - st.x, dy = e.clientY - st.y;
+    if (!st.on) { if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) { st = null; return; } if (Math.abs(dx) < 10) return; st.on = true; st.dr.style.transition = 'none'; }
+    st.dx = st.side === 'left' ? Math.min(0, dx) : Math.max(0, dx); st.dr.style.transform = `translateX(${st.dx}px)`; }, true);
+  const end = () => { if (!st) return; const s2 = st; st = null; if (!s2.on) return; s2.dr.style.transition = ''; s2.dr.style.transform = '';
+    const v = Math.abs(s2.dx) / Math.max(1, Date.now() - s2.t); if (Math.abs(s2.dx) > s2.w * .25 || v > .45) { $('ws').classList.remove('show-' + s2.side); buzz(); }
+    const kill = ev => { ev.stopPropagation(); ev.preventDefault(); }; addEventListener('click', kill, { capture: true, once: true }); setTimeout(() => removeEventListener('click', kill, true), 400); };
+  document.addEventListener('pointerup', end, true); document.addEventListener('pointercancel', end, true);
+})();
 
 /* ---------- desfazer / refazer ---------- */
 const HIST = { pid: null, u: [], r: [], last: null, t: 0 };
